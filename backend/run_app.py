@@ -1,10 +1,10 @@
+import threading
+import time
+import webbrowser
+
 import uvicorn
 
 from app.main import app
-
-import webbrowser
-import threading
-import time
 
 if __name__ == "__main__":
     def open_browser():
