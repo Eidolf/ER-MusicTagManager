@@ -16,7 +16,7 @@ def read_version():
 def write_version(version):
     with open(VERSION_FILE, 'w') as f:
         f.write(version)
-    print(f"Version updated to: {version}")
+    # print(f"Version updated to: {version}") # Silence output for CI capture
 
 def get_current_date_parts():
     now = datetime.now()
@@ -78,4 +78,4 @@ if __name__ == "__main__":
     if args.action == 'read':
         print(read_version())
     elif args.action == 'bump':
-        bump_version(args.type)
+        print(bump_version(args.type))
