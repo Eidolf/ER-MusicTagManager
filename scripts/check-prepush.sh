@@ -61,6 +61,15 @@ else
 fi
 cd ..
 
+echo -n "   - Git Ignored Files (VERSION)... "
+if git check-ignore -q VERSION; then
+    echo -e "${RED}FAIL${NC}"
+    echo "Error: VERSION file is ignored by git! Please remove it from .gitignore"
+    exit 1
+else
+    echo -e "${GREEN}PASS${NC}"
+fi
+
 # 3. Simulation Mode: Act
 echo -e "\n${YELLOW}[3/3] Simulating GitHub Actions (using 'act')...${NC}"
 echo "   This may take a minute..."
