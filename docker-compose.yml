@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/app:/app/app
+      # Mount input/output directories for local testing
+      - ./data/input:/data/input
+      - ./data/output:/data/output
+      # Mount user's music directory for direct access testing
+      - /home/dev/Music:/home/dev/Music
+    environment:
+      - APP_ENV=development
+      - LOG_LEVEL=DEBUG
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/api/v1/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend

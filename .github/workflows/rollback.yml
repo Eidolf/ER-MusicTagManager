@@ -1,0 +1,26 @@
+name: Manual Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version Tag to Delete (e.g., v2025.12.1)'
+        required: true
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  rollback:
+    name: Rollback Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Delete Release and Tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete ${{ inputs.version }} --yes || echo "Release not found"
+          git push --delete origin refs/tags/${{ inputs.version }} || echo "Tag not found locally/remotely"

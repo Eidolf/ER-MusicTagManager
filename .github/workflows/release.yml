@@ -1,0 +1,171 @@
+name: Release Manager
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'Release Type'
+        required: true
+        default: 'nightly'
+        type: choice
+        options:
+          - nightly
+          - beta
+          - stable
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Calculate Version
+        id: version
+        run: |
+          chmod +x scripts/version_manager.py
+          NEW_VERSION=$(python3 scripts/version_manager.py bump --type ${{ inputs.release_type }})
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          
+      - name: Commit Version Bump
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add VERSION
+          git commit -m "chore: bump version to ${{ steps.version.outputs.version }}"
+          git push
+
+      - name: Create GitHub Release
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "v${{ steps.version.outputs.version }}"
+          name: "Release v${{ steps.version.outputs.version }}"
+          generate_release_notes: true
+          prerelease: ${{ inputs.release_type != 'stable' }}
+
+      - name: Log in to Docker Hub
+        # Assumes Dockerhub. Replace with ghcr.io if preferred
+        uses: docker/login-action@v3
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+        if: env.DOCKER_USERNAME != ''
+
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v5
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+        with:
+          context: .
+          push: ${{ env.DOCKER_USERNAME != '' }}
+          tags: |
+            er-musictagmanager:${{ inputs.release_type }}
+            er-musictagmanager:${{ steps.version.outputs.version }}
+            ${{ inputs.release_type == 'stable' && 'er-musictagmanager:latest' || '' }}
+
+  package:
+    name: Build Apps
+    needs: release
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact_name: ER-MusicTagManager-Linux
+            asset_name: ER-MusicTagManager-Linux
+          - os: windows-latest
+            artifact_name: ER-MusicTagManager-Windows
+            asset_name: ER-MusicTagManager-Windows.exe
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install Frontend
+        run: cd frontend && npm ci
+
+      - name: Build Frontend
+        run: cd frontend && npm run build
+
+      - name: Install Backend
+        run: |
+          pip install poetry
+          cd backend && poetry install
+          poetry run pip install pyinstaller
+
+      - name: Build Executable
+        run: |
+          cd backend
+          poetry run pyinstaller build.spec
+
+      - name: Upload Release Asset (Windows)
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.release.outputs.upload_url }}
+          asset_path: backend/dist/ER-MusicTagManager/ER-MusicTagManager.exe
+          asset_name: ${{ matrix.asset_name }}
+          asset_content_type: application/octet-stream
+
+      - name: Archive Linux Build
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          cd backend/dist
+          tar -czvf ER-MusicTagManager-Linux.tar.gz ER-MusicTagManager
+
+      - name: Upload Release Asset (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.release.outputs.upload_url }}
+          asset_path: backend/dist/ER-MusicTagManager-Linux.tar.gz
+          asset_name: ER-MusicTagManager-Linux.tar.gz
+          asset_content_type: application/gzip
+
+  post-release:
+    name: Post Release Bump
+    needs: [release, package]
+    if: inputs.release_type != 'nightly'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main 
+          fetch-depth: 0
+      - name: Bump Dev Version
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          python3 scripts/version_manager.py bump --type dev
+          git add VERSION
+          git commit -m "chore: prepare for next dev cycle"
+          git push
