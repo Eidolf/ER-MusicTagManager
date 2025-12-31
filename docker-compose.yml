@@ -4,7 +4,7 @@ services:
   backend:
     build: ./backend
     ports:
-      - "8000:8000"
+      - "13010:13010"
     volumes:
       - ./backend/app:/app/app
       # Mount input/output directories for local testing
@@ -16,7 +16,7 @@ services:
       - APP_ENV=development
       - LOG_LEVEL=DEBUG
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8000/api/v1/health" ]
+      test: [ "CMD", "curl", "-f", "http://localhost:13010/api/v1/health" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -24,6 +24,6 @@ services:
   frontend:
     build: ./frontend
     ports:
-      - "5173:80"
+      - "13011:80"
     depends_on:
       - backend

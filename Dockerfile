@@ -35,7 +35,5 @@ COPY backend/app/main.py ./app/main.py
 COPY --from=frontend-build /app/frontend/dist ./static
 
 # Expose port
-EXPOSE 8000
-
-# Run
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+EXPOSE 13010
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "13010"]
