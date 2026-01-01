@@ -11,7 +11,7 @@ class IdentificationService:
     BASE_URL = "https://musicbrainz.org/ws/2"
     USER_AGENT = "ER-MusicTagManager/1.0.0 ( contact@example.com )"
 
-    async def identify_album(self, album: Album) -> Album:
+    async def identify_album(self, album: Album, client: httpx.AsyncClient | None = None) -> Album:
         """
         Queries MusicBrainz for the best matching release based on Artist and Album Title.
         Updates the album status and metadata if a high-confidence match is found.
@@ -33,11 +33,14 @@ class IdentificationService:
             "limit": 1
         }
 
+        should_close = False
+        # Use provided client or create one (fallback)
+        if client is None:
+            client = httpx.AsyncClient(verify=False, timeout=10.0)
+            should_close = True
+
         try:
-            # verify=False is used here to avoid SSL certificate issues in some Docker/Portable environments.
-            # In production with proper certs, this should be True.
-            async with httpx.AsyncClient(verify=False, timeout=10.0) as client:
-                response = await client.get(f"{self.BASE_URL}/release", params=params, headers=headers)
+            response = await client.get(f"{self.BASE_URL}/release", params=params, headers=headers)
                 
             if response.status_code == 200:
                 data = response.json()
@@ -61,77 +64,107 @@ class IdentificationService:
                             lookup_params = {
                                 "inc": "recordings+artist-credits+labels+isrcs+release-groups+url-rels"
                             }
-                            async with httpx.AsyncClient(verify=False, timeout=10.0) as detail_client:
-                                await asyncio.sleep(1.1)
-                                det_resp = await detail_client.get(
-                                    f"{self.BASE_URL}/release/{album.mb_release_id}", 
-                                    params=lookup_params, 
-                                    headers=headers
-                                )
-                                
-                                if det_resp.status_code == 200:
-                                    details = det_resp.json()
-                                    meta = {}
-                                    
-                                    # Basic Info
-                                    meta['musicbrainz_albumid'] = details.get('id', '')
-                                    meta['barcode'] = details.get('barcode', '')
-                                    meta['asin'] = details.get('asin', '')
-                                    meta['status'] = details.get('status', '') # releasestatus
-                                    meta['type'] = (
-                                        details.get('release-events', [{}])[0]
-                                        .get('area', {})
-                                        .get('name', '')
-                                    ) # Approximating releasecountry/type
-                                    
-                                    # Label
-                                    if 'label-info' in details and details['label-info']:
-                                        li = details['label-info'][0]
-                                        if 'label' in li:
-                                            meta['label'] = li['label'].get('name', '')
-                                            meta['catalognumber'] = li.get('catalog-number', '')
-                                    
-                                    # Date
-                                    meta['date'] = details.get('date', '')
-                                    meta['originaldate'] = details.get('date', '') # Often same if not digging deeper
-                                    
-                                    # Release Group
-                                    if 'release-group' in details:
-                                        rg = details['release-group']
-                                        meta['musicbrainz_releasegroupid'] = rg.get('id', '')
-                                        meta['musicbrainz_primarytype'] = rg.get('primary-type', '')
-                                    
-                                    # Artist IDs
-                                    if 'artist-credit' in details and details['artist-credit']:
-                                        ac = details['artist-credit'][0]
-                                        if 'artist' in ac:
-                                            meta['musicbrainz_artistid'] = ac['artist'].get('id', '')
-                                            meta['musicbrainz_albumartistid'] = (
-                                                ac['artist'].get('id', '')
-                                            ) # Assuming 1 artist for now
-                                            meta['albumartist'] = ac['artist'].get('name', '')
-                                            meta['albumartistsort'] = ac['artist'].get('sort-name', '')
 
-                                    # Media / Discs
-                                    if 'media' in details and details['media']:
-                                        medium = details['media'][0]
-                                        meta['media'] = medium.get('format', '')
-                                        meta['totaldiscs'] = str(len(details['media']))
-                                        meta['discnumber'] = str(medium.get('position', '1'))
-                                        meta['totaltracks'] = str(medium.get('track-count', ''))
+                            await asyncio.sleep(1.1)
+                            # Reuse existing client
+                            det_resp = await client.get(
+                                f"{self.BASE_URL}/release/{album.mb_release_id}", 
+                                params=lookup_params, 
+                                headers=headers
+                            )
+                            
+                            if det_resp.status_code == 200:
+                                details = det_resp.json()
+                                meta = {}
+                                
+                                # Basic Info
+                                meta['musicbrainz_albumid'] = details.get('id', '')
+                                meta['barcode'] = details.get('barcode', '')
+                                meta['asin'] = details.get('asin', '')
+                                meta['releasestatus'] = details.get('status', '') 
+                                meta['releasecountry'] = details.get('country', '')
+                                
+                                # Script
+                                if 'text-representation' in details:
+                                    meta['script'] = details['text-representation'].get('script', '')
+                                
+                                # Label
+                                if 'label-info' in details and details['label-info']:
+                                    li = details['label-info'][0]
+                                    if 'label' in li:
+                                        meta['label'] = li['label'].get('name', '')
+                                        meta['catalognumber'] = li.get('catalog-number', '')
+                                
+                                # Date
+                                meta['date'] = details.get('date', '')
+                                meta['originaldate'] = details.get('date', '')
+                                
+                                # Release Group
+                                if 'release-group' in details:
+                                    rg = details['release-group']
+                                    meta['musicbrainz_releasegroupid'] = rg.get('id', '')
+                                    meta['musicbrainz_primarytype'] = rg.get('primary-type', '')
+                                    meta['releasetype'] = rg.get('primary-type', '')
+                                    
+                                    first_date = rg.get('first-release-date', '')
+                                    if first_date:
+                                        meta['originalyear'] = first_date[:4]
+                                        meta['originaldate'] = first_date
+
+                                # Artist IDs & Multi-Value Artists
+                                if 'artist-credit' in details and details['artist-credit']:
+                                    ac_list = details['artist-credit']
+                                    ac = ac_list[0]
+                                    if 'artist' in ac:
+                                        meta['musicbrainz_artistid'] = ac['artist'].get('id', '')
+                                        meta['musicbrainz_albumartistid'] = (
+                                            ac['artist'].get('id', '')
+                                        )
+                                        meta['albumartist'] = ac['artist'].get('name', '')
                                         
-                                        # Tracks / Recordings (Assuming mapping 1:1 to files by order is risky?
-                                        # Ideally we map by track filename/length match, but for now we stash raw data?
-                                        # Or better: We put album-level data here. 
-                                        # Track-level data like ISRC needs file-mapping logic.
-                                        # For this specific request, let's store album-level data in extended_metadata
-                                        # And maybe lists for track data?)
+                                    artists_sort = [
+                                        item['artist']['sort-name'] for item in ac_list if 'artist' in item
+                                    ]
+                                    meta['artistsort'] = '; '.join(artists_sort)
                                     
-                                    # Store dictionary
-                                    album.extended_metadata = {k: v for k, v in meta.items() if v}
+                                    # Full artist list
+                                    artists = [item['artist']['name'] for item in ac_list if 'artist' in item]
+                                    meta['artists'] = '; '.join(artists)
+
+                                # Media / Discs / Tracks
+                                if 'media' in details:
+                                    tracks_data = []
+                                    total_discs = len(details['media'])
+                                    meta['totaldiscs'] = str(total_discs)
                                     
+                                    # Flatten all tracks from all discs to match file list?
+                                    # Assuming file list might be just files in folder.
+                                    # Logic: Iterate all media, collect all tracks.
+                                    for current_disc, medium in enumerate(details['media'], start=1):
+                                        # We only store disc/track totals for the first matches usually 
+                                        # or aggregate? Match metadata.
+                                        
+                                        if current_disc == 1:
+                                            meta['media'] = medium.get('format', '')
+                                            meta['discnumber'] = str(medium.get('position', '1'))
+                                            meta['totaltracks'] = str(medium.get('track-count', ''))
+
+                                        if 'tracks' in medium:
+                                            for track in medium['tracks']:
+                                                t_meta = {}
+                                                t_meta['musicbrainz_trackid'] = track.get('id', '')
+                                                if 'recording' in track:
+                                                    rec_id = track['recording'].get('id', '')
+                                                    t_meta['musicbrainz_recordingid'] = rec_id
+                                                tracks_data.append(t_meta)
+                                    
+                                    album.tracks_metadata = tracks_data
+                                
+                                # Store dictionary
+                                album.extended_metadata = {k: v for k, v in meta.items() if v}
+                                
                         except Exception as e:
-                            logger.warning(f"Secondary lookup failed for {album.title}: {e}")
+                            logger.warning(f"Secondary lookup failed for {album.title}: {repr(e)}")
 
                         
                         date_str = match.get("date", "")
@@ -145,7 +178,7 @@ class IdentificationService:
                             # Optimistic: http://coverartarchive.org/release/{mbid}/front
                             album.cover_art_url = f"http://coverartarchive.org/release/{album.mb_release_id}/front"
                         except Exception as e:
-                            logger.warning(f"Could not determine cover art URL: {e}")
+                            logger.warning(f"Could not determine cover art URL: {repr(e)}")
 
                     else:
                         album.status = "Unclear (Low Confidence)"
@@ -153,11 +186,15 @@ class IdentificationService:
                     album.status = "NotFound"
             else:
                 logger.error(f"MusicBrainz API Error: {response.status_code}")
-                album.status = "API Error"
+                album.status = f"API Error: {response.status_code}"
                 
         except Exception as e:
-            logger.error(f"Identification failed: {e}")
+            logger.error(f"Identification failed: {repr(e)}")
             album.status = f"Error: {str(e)}"
+        
+        finally:
+            if should_close:
+                await client.aclose()
 
         # Rate limiting compliance (1 req/sec per logic, but here we process list serially or with semaphore)
         await asyncio.sleep(1.1) 
@@ -165,6 +202,7 @@ class IdentificationService:
         return album
 
     async def identify_all(self, albums: list[Album]) -> list[Album]:
-        for album in albums:
-            await self.identify_album(album)
+        async with httpx.AsyncClient(verify=False, timeout=10.0) as client:
+            for album in albums:
+                await self.identify_album(album, client=client)
         return albums

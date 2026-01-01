@@ -24,6 +24,7 @@ class Album(BaseModel):
     
     # Extended Metadata (MusicBrainz full data)
     extended_metadata: dict[str, str] = {}
+    tracks_metadata: list[dict[str, str]] = []
 
     
     # Identification / Match Status
