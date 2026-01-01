@@ -76,7 +76,7 @@ class TaggingService:
                                     'catalognumber': 'TXXX:CATALOGNUMBER',
                                     'isrc': 'TSRC',
                                     'musicbrainz_recordingid': 'UFID:http://musicbrainz.org',
-                                    'musicbrainz_trackid': 'UFID:http://musicbrainz.org',
+                                    'musicbrainz_trackid': 'TXXX:MusicBrainz Release Track Id',
                                     'script': 'TXXX:SCRIPT',
                                     'originalyear': 'TXXX:ORIGINALYEAR',
                                     'originaldate': 'TDOR', # ID3 v2.4

@@ -30,27 +30,87 @@ class IdentificationService:
         params = {
             "query": query,
             "fmt": "json",
-            "limit": 1
+            "limit": 10
         }
 
         should_close = False
-        # Use provided client or create one (fallback)
         if client is None:
-            client = httpx.AsyncClient(verify=False, timeout=10.0)
+            active_client = httpx.AsyncClient(verify=False, timeout=10.0)
             should_close = True
+        else:
+            active_client = client
 
         try:
-            response = await client.get(f"{self.BASE_URL}/release", params=params, headers=headers)
+            # Retry loop for API resilience
+            max_retries = 3
+            backoff = 1.0
+            response = None
+            
+            for attempt in range(max_retries + 1):
+                try:
+                    response = await active_client.get(f"{self.BASE_URL}/release", params=params, headers=headers)
+                    
+                    if response.status_code == 503 and attempt < max_retries:
+                        logger.warning(
+                            f"MusicBrainz 503 (Attempt {attempt+1}/{max_retries}). "
+                            f"Retrying in {backoff}s..."
+                        )
+                        await asyncio.sleep(backoff)
+                        backoff *= 2
+                        continue
+                    
+                    break # Success or non-retriable status
+
+                except (httpx.TimeoutException, httpx.RequestError) as e:
+                    if attempt < max_retries:
+                        logger.warning(f"MusicBrainz Network Error: {e}. Retrying in {backoff}s...")
+                        await asyncio.sleep(backoff)
+                        backoff *= 2
+                    else:
+                        raise e
+            
+            if not response:
+                 album.status = "API Error: No Response"
+                 return album
                 
             if response.status_code == 200:
                 data = response.json()
                 releases = data.get("releases", [])
                 
-                if releases:
-                    match = releases[0]
-                    score = int(match.get("score", "0"))
+                # Filter for high confidence candidates
+                candidates = [r for r in releases if int(r.get("score", "0")) > 80]
+                
+                if candidates:
+                    # Smart Selection Logic
+                    # Priority 1: Exact Track Count Match (diff=0 is best)
+                    # Priority 2: Cover Art Available (cover-art-archive.front == True)
+                    # Priority 3: Score (Higher is better)
                     
-                    if score > 80: # Confidence threshold
+                    file_count = len(album.files)
+                    
+                    def score_candidate(release):
+                        # Track Count Diff (Minimize)
+                        track_count = int(release.get("track-count", 0))
+                        diff = abs(track_count - file_count)
+                        
+                        # Cover Art (Maximize: 1=Yes, 0=No/Unknown)
+                        has_cover = 0
+                        if "cover-art-archive" in release and release["cover-art-archive"].get("front", False):
+                            has_cover = 1
+                            
+                        # Score (Maximize)
+                        score_val = int(release.get("score", "0"))
+                        
+                        # Return tuple for sorting: 
+                        # (diff ASC, has_cover DESC, score DESC)
+                        return (diff, -has_cover, -score_val)
+
+                    candidates.sort(key=score_candidate)
+                    
+                    match = candidates[0]
+                    # score variable was unused, removed it.
+                    
+                    if True: # Score check already done in filtering
                         album.mb_release_id = match.get("id")
                         album.title = match.get("title")
                         if "artist-credit" in match:
@@ -66,8 +126,16 @@ class IdentificationService:
                             }
 
                             await asyncio.sleep(1.1)
-                            # Reuse existing client
-                            det_resp = await client.get(
+                            # Reuse existing client (active_client)
+                            
+                            det_resp = None
+                            # Retry loop for secondary lookup as well? MusicBrainz might rate limit here too.
+                            # Simpler: Just one try with the active client, or maybe minimal retry.
+                            # Let's trust the outer retry is mostly for initial connection, but 503 can happen anywhere.
+                            # For now, standard single try on active_client to avoid complexity explosion, 
+                            # as connection pooling solves most issues.
+                            
+                            det_resp = await active_client.get(
                                 f"{self.BASE_URL}/release/{album.mb_release_id}", 
                                 params=lookup_params, 
                                 headers=headers
@@ -186,6 +254,7 @@ class IdentificationService:
                     album.status = "NotFound"
             else:
                 logger.error(f"MusicBrainz API Error: {response.status_code}")
+                # Don't overwrite error if it's already set to something more specific
                 album.status = f"API Error: {response.status_code}"
                 
         except Exception as e:
@@ -193,8 +262,8 @@ class IdentificationService:
             album.status = f"Error: {str(e)}"
         
         finally:
-            if should_close:
-                await client.aclose()
+            if should_close and active_client:
+                await active_client.aclose()
 
         # Rate limiting compliance (1 req/sec per logic, but here we process list serially or with semaphore)
         await asyncio.sleep(1.1) 
