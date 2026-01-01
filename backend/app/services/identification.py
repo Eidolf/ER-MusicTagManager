@@ -50,9 +50,89 @@ class IdentificationService:
                     if score > 80: # Confidence threshold
                         album.mb_release_id = match.get("id")
                         album.title = match.get("title")
-                        # Extract artist credit if needed, logic is complex, simpler for now
                         if "artist-credit" in match:
                              album.artist = match["artist-credit"][0]["name"]
+                            
+                        # Secondary Lookup for Comprehensive Metadata
+                        try:
+                            # 1 req/sec max usually, but we are inside a serial loop in identify_all? 
+                            # If identify_all calls this, we should sleep effectively.
+                            # We need detailed info: recordings, isrcs, labels, artist-credits, release-groups, url-rels
+                            lookup_params = {
+                                "inc": "recordings+artist-credits+labels+isrcs+release-groups+url-rels"
+                            }
+                            async with httpx.AsyncClient(verify=False, timeout=10.0) as detail_client:
+                                await asyncio.sleep(1.1)
+                                det_resp = await detail_client.get(
+                                    f"{self.BASE_URL}/release/{album.mb_release_id}", 
+                                    params=lookup_params, 
+                                    headers=headers
+                                )
+                                
+                                if det_resp.status_code == 200:
+                                    details = det_resp.json()
+                                    meta = {}
+                                    
+                                    # Basic Info
+                                    meta['musicbrainz_albumid'] = details.get('id', '')
+                                    meta['barcode'] = details.get('barcode', '')
+                                    meta['asin'] = details.get('asin', '')
+                                    meta['status'] = details.get('status', '') # releasestatus
+                                    meta['type'] = (
+                                        details.get('release-events', [{}])[0]
+                                        .get('area', {})
+                                        .get('name', '')
+                                    ) # Approximating releasecountry/type
+                                    
+                                    # Label
+                                    if 'label-info' in details and details['label-info']:
+                                        li = details['label-info'][0]
+                                        if 'label' in li:
+                                            meta['label'] = li['label'].get('name', '')
+                                            meta['catalognumber'] = li.get('catalog-number', '')
+                                    
+                                    # Date
+                                    meta['date'] = details.get('date', '')
+                                    meta['originaldate'] = details.get('date', '') # Often same if not digging deeper
+                                    
+                                    # Release Group
+                                    if 'release-group' in details:
+                                        rg = details['release-group']
+                                        meta['musicbrainz_releasegroupid'] = rg.get('id', '')
+                                        meta['musicbrainz_primarytype'] = rg.get('primary-type', '')
+                                    
+                                    # Artist IDs
+                                    if 'artist-credit' in details and details['artist-credit']:
+                                        ac = details['artist-credit'][0]
+                                        if 'artist' in ac:
+                                            meta['musicbrainz_artistid'] = ac['artist'].get('id', '')
+                                            meta['musicbrainz_albumartistid'] = (
+                                                ac['artist'].get('id', '')
+                                            ) # Assuming 1 artist for now
+                                            meta['albumartist'] = ac['artist'].get('name', '')
+                                            meta['albumartistsort'] = ac['artist'].get('sort-name', '')
+
+                                    # Media / Discs
+                                    if 'media' in details and details['media']:
+                                        medium = details['media'][0]
+                                        meta['media'] = medium.get('format', '')
+                                        meta['totaldiscs'] = str(len(details['media']))
+                                        meta['discnumber'] = str(medium.get('position', '1'))
+                                        meta['totaltracks'] = str(medium.get('track-count', ''))
+                                        
+                                        # Tracks / Recordings (Assuming mapping 1:1 to files by order is risky?
+                                        # Ideally we map by track filename/length match, but for now we stash raw data?
+                                        # Or better: We put album-level data here. 
+                                        # Track-level data like ISRC needs file-mapping logic.
+                                        # For this specific request, let's store album-level data in extended_metadata
+                                        # And maybe lists for track data?)
+                                    
+                                    # Store dictionary
+                                    album.extended_metadata = {k: v for k, v in meta.items() if v}
+                                    
+                        except Exception as e:
+                            logger.warning(f"Secondary lookup failed for {album.title}: {e}")
+
                         
                         date_str = match.get("date", "")
                         if date_str and date_str[:4].isdigit():
@@ -62,10 +142,6 @@ class IdentificationService:
                         
                         # Fetch Cover Art URL
                         try:
-                            # Cover Art Archive API: http://coverartarchive.org/release/{mbid}
-                            # We check if front image exists without full query to save time/bandwidth? 
-                            # Or just construct URL and let TaggingService handle 404? 
-                            # Better: Check existence briefly or optimistic.
                             # Optimistic: http://coverartarchive.org/release/{mbid}/front
                             album.cover_art_url = f"http://coverartarchive.org/release/{album.mb_release_id}/front"
                         except Exception as e:

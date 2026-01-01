@@ -171,3 +171,15 @@ async def tag_files(albums: list[Album]) -> list[Album]:
 async def organize_files(request: OrganizeRequest) -> dict:
     service = OrganizationService(request.output_path)
     return await service.organize_all(request.albums)
+@router.post("/system/shutdown")
+async def shutdown_application():
+    import signal
+    import threading
+    import time
+    
+    def kill_server():
+        time.sleep(1)
+        os.kill(os.getpid(), signal.SIGINT)
+        
+    threading.Thread(target=kill_server).start()
+    return {"status": "shutting_down", "message": "Server will shutdown in 1 second"}

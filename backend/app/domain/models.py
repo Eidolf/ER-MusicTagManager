@@ -12,6 +12,7 @@ class MusicFile(BaseModel):
     artist: str | None = None
     album: str | None = None
     year: int | None = None
+    extended_tags: dict[str, str] = {}
 
 class Album(BaseModel):
     id: str # UUID or Scan Path
@@ -20,6 +21,10 @@ class Album(BaseModel):
     year: int | None = None
     path: Path
     files: list[MusicFile] = []
+    
+    # Extended Metadata (MusicBrainz full data)
+    extended_metadata: dict[str, str] = {}
+
     
     # Identification / Match Status
     status: str = "Pending"  # Pending, Match, Unclear, NotFound

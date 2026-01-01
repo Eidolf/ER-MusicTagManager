@@ -10,6 +10,7 @@ interface MusicFile {
     artist?: string;
     album?: string;
     year?: number;
+    extended_tags?: Record<string, string>;
 }
 
 interface Album {
@@ -27,7 +28,63 @@ interface Album {
 
 // --- Components ---
 
-const DetailsModal = ({ title, data, onClose, type }: { title: string, data: Album[], onClose: () => void, type: string }) => {
+// --- Components ---
+const MetadataDiffModal = ({ file, original, onClose }: { file: MusicFile, original?: MusicFile, onClose: () => void }) => {
+    // Collect all unique keys
+    const allKeys = new Set<string>();
+
+    // Standard keys
+    ['title', 'artist', 'album', 'year'].forEach(k => allKeys.add(k));
+
+    // Extended keys
+    // We don't have extended tags in frontend model explicit properties for 'original' scan unless we store it.
+    // However, the 'file' object is from the 'tagged' response which has 'extended_tags'.
+    // The 'original' object is from 'scanned' response.
+    // Since we don't scan deep extended metadata initially in scan_directory (only easyid3 standard),
+    // the diff for extended tags will mostly be New vs None.
+
+    if (file.extended_tags) Object.keys(file.extended_tags).forEach(k => allKeys.add(k));
+
+    return (
+        <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-[60] p-8" onClick={onClose}>
+            <div className="bg-gray-800 rounded-xl p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto border border-gray-600" onClick={e => e.stopPropagation()}>
+                <div className="flex justify-between items-center mb-6 border-b border-gray-700 pb-4">
+                    <h2 className="text-xl font-bold text-white">Metadata Changes: <span className="text-primary font-mono text-sm">{file.filename}</span></h2>
+                    <button onClick={onClose} className="text-gray-400 hover:text-white text-2xl">&times;</button>
+                </div>
+
+                <div className="grid grid-cols-3 gap-4 font-bold text-gray-400 mb-2 px-2">
+                    <div>Field</div>
+                    <div>Original (Scan)</div>
+                    <div>New (Tag)</div>
+                </div>
+
+                <div className="space-y-1">
+                    {Array.from(allKeys).sort().map(key => {
+                        // @ts-expect-error: Dynamic key access
+                        const origVal = original ? (original[key] || original.extended_tags?.[key] || '-') : '-';
+                        // @ts-expect-error: Dynamic key access
+                        const newVal = file[key] || file.extended_tags?.[key] || '-';
+
+                        const isDifferent = String(origVal) !== String(newVal);
+
+                        return (
+                            <div key={key} className={`grid grid-cols-3 gap-4 px-2 py-2 rounded ${isDifferent ? 'bg-gray-700/50' : ''}`}>
+                                <div className="text-gray-400 font-mono text-xs uppercase">{key}</div>
+                                <div className="text-gray-500 text-sm truncate" title={String(origVal)}>{String(origVal)}</div>
+                                <div className={`text-sm truncate font-medium ${isDifferent ? 'text-green-400' : 'text-gray-500'}`} title={String(newVal)}>
+                                    {String(newVal)}
+                                </div>
+                            </div>
+                        )
+                    })}
+                </div>
+            </div>
+        </div>
+    )
+}
+
+const DetailsModal = ({ title, data, onClose, type, onDiff }: { title: string, data: Album[], onClose: () => void, type: string, onDiff?: (file: MusicFile) => void }) => {
     // State moved here - SAFE now
     const [expandedAlbumId, setExpandedAlbumId] = useState<string | null>(null);
 
@@ -66,12 +123,14 @@ const DetailsModal = ({ title, data, onClose, type }: { title: string, data: Alb
                                                 </div>
                                             </div>
                                             <div className="flex flex-col items-end gap-2">
-                                                <div className={`px-2 py-1 rounded text-xs font-bold uppercase whitespace-nowrap ${album.status === 'Match' ? 'bg-green-900 text-green-400' :
+                                                <div
+                                                    onClick={() => (album.status?.startsWith('Error') || album.status === 'API Error') && alert(album.status)}
+                                                    className={`px-2 py-1 rounded text-xs font-bold uppercase whitespace-nowrap ${(album.status?.startsWith('Error') || album.status === 'API Error') ? 'cursor-pointer hover:bg-red-800' : ''} ${album.status === 'Match' ? 'bg-green-900 text-green-400' :
                                                         album.status === 'Unclear' ? 'bg-yellow-900 text-yellow-400' :
                                                             (album.status?.startsWith('Error') || album.status === 'API Error') ? 'bg-red-900 text-red-200' :
                                                                 'bg-gray-700'
-                                                    }`}>
-                                                    {album.status || 'Pending'}
+                                                        }`}>
+                                                    {(album.status?.startsWith('Error')) ? 'Error ℹ' : (album.status || 'Pending')}
                                                 </div>
 
                                                 {/* Toggle Button for Details */}
@@ -124,8 +183,7 @@ const DetailsModal = ({ title, data, onClose, type }: { title: string, data: Alb
                                                         <th className="py-2 px-2">Title</th>
                                                         <th className="py-2 px-2">Artist</th>
                                                         <th className="py-2 px-2">Album</th>
-                                                        <th className="py-2 px-2">Year</th>
-                                                        <th className="py-2 px-2">Size</th>
+                                                        <th className="py-2 px-2">Actions</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody className="divide-y divide-gray-700/50">
@@ -135,8 +193,16 @@ const DetailsModal = ({ title, data, onClose, type }: { title: string, data: Alb
                                                             <td className="py-2 px-2 text-white">{f.title || "-"}</td>
                                                             <td className="py-2 px-2">{f.artist || "-"}</td>
                                                             <td className="py-2 px-2">{f.album || "-"}</td>
-                                                            <td className="py-2 px-2">{f.year || "-"}</td>
-                                                            <td className="py-2 px-2 font-mono">{(f.size_bytes / 1024 / 1024).toFixed(2)} MB</td>
+                                                            <td className="py-2 px-2">
+                                                                {type === 'tagged' && (
+                                                                    <button
+                                                                        onClick={() => onDiff && onDiff(f)}
+                                                                        className="text-primary hover:text-blue-400 underline"
+                                                                    >
+                                                                        Diff
+                                                                    </button>
+                                                                )}
+                                                            </td>
                                                         </tr>
                                                     ))}
                                                 </tbody>
@@ -173,6 +239,7 @@ function App() {
 
     // UI View State
     const [viewDetails, setViewDetails] = useState<string | null>(null);
+    const [diffFile, setDiffFile] = useState<{ file: MusicFile, original?: MusicFile } | null>(null);
 
     // --- Effects ---
     useEffect(() => {
@@ -203,6 +270,17 @@ function App() {
             setMbStatus({ status: 'offline', message: 'Connection Failed' });
         }
     };
+
+    const handleShutdown = async () => {
+        if (!confirm("Are you sure you want to shut down the application?")) return;
+        try {
+            await fetch('/api/v1/system/shutdown', { method: 'POST' });
+            alert("Application is shutting down. You can close this window.");
+            setStatus("Offline");
+        } catch (e) {
+            console.error("Shutdown failed", e);
+        }
+    }
 
     // --- Main Workflow ---
     const handleStart = async () => {
@@ -308,6 +386,30 @@ function App() {
         return null;
     };
 
+    const handleDiff = (file: MusicFile) => {
+        // Find original file from scannedAlbums
+        // Weak matching by filename + albumId (path in scanned) mostly unique
+        // Or we just search through all scannedAlbums since we don't have direct mapping ID persisted easily
+        // But scannedAlbums structure mirros taggedAlbums structure mostly (except when ID changed?)
+
+        let original: MusicFile | undefined;
+        // Optimization: Find album in scanned with same path/ID
+        // Note: ID in tagged/identified might be MBID-based? No, we kept path-based ID in 'scan' logic unless changed.
+        // Wait, identification.py replaces ID? No, it updates MBID field. ID field stays path often?
+        // Let's assume ID is stable-ish or search by path.
+
+        for (const alb of scannedAlbums) {
+            // Find file
+            const found = alb.files.find(f => f.filename === file.filename && f.size_bytes === file.size_bytes);
+            if (found) {
+                original = found;
+                break;
+            }
+        }
+
+        setDiffFile({ file, original });
+    }
+
     const modalInfo = getModalData();
 
     return (
@@ -328,7 +430,7 @@ function App() {
                         </h1>
                     </div>
                     {/* Status Indicators */}
-                    <div className="flex gap-6 text-sm">
+                    <div className="flex items-center gap-6 text-sm">
                         <div className="text-gray-400">
                             System: <span className={status === "Error" ? "text-red-500 font-bold" : "text-green-400 text-shadow-glow"}>{status}</span>
                         </div>
@@ -339,6 +441,15 @@ function App() {
                                         "text-red-500 font-bold"
                             }>{mbStatus.status === 'online' ? "Online" : "Offline"}</span>
                         </div>
+                        <button
+                            onClick={handleShutdown}
+                            className="bg-red-900/50 hover:bg-red-700 text-red-200 p-2 rounded-full transition-colors"
+                            title="Shutdown Application"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M5.636 5.636a9 9 0 1012.728 0M12 3v9" />
+                            </svg>
+                        </button>
                     </div>
                 </div>
 
@@ -350,7 +461,7 @@ function App() {
                             type="text"
                             value={inputPath}
                             onChange={(e) => setInputPath(e.target.value)}
-                            placeholder="/path/to/music/input"
+                            placeholder="e.g. Linux: /music | Win: C:\Users\Music"
                             className="bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm focus:border-primary focus:outline-none transition-colors"
                         />
                     </div>
@@ -360,7 +471,7 @@ function App() {
                             type="text"
                             value={outputPath}
                             onChange={(e) => setOutputPath(e.target.value)}
-                            placeholder="/path/to/music/output"
+                            placeholder="e.g. Linux: /sorted | Win: C:\Users\Sorted"
                             className="bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm focus:border-green-500 focus:outline-none transition-colors"
                         />
                     </div>
@@ -441,6 +552,15 @@ function App() {
                     data={modalInfo.data}
                     onClose={() => setViewDetails(null)}
                     type={viewDetails}
+                    onDiff={handleDiff}
+                />
+            )}
+
+            {diffFile && diffFile.file && (
+                <MetadataDiffModal
+                    file={diffFile.file}
+                    original={diffFile.original}
+                    onClose={() => setDiffFile(null)}
                 />
             )}
 

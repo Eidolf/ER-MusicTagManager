@@ -55,10 +55,60 @@ class TaggingService:
                         audio['date'] = str(album.year)
                     audio.save()
                     
+                    # Extended Metadata (ID3 TXXX)
+                    # We need to re-open with mutagen.id3.ID3 to add frames safely 
+                    # if EasyID3 doesn't support them easily
+                    if album.extended_metadata:
+                        try:
+                            from mutagen.id3 import ID3, TXXX
+                            tags = ID3(file.path)
+                            for k, v in album.extended_metadata.items():
+                                # Map common keys to standard ID3 frames if possible?
+                                # For now, use TXXX for everything requested as "MusicBrainz style" 
+                                # usually implies TXXX for MBIDs
+                                # But some like 'label' -> TPUB, 'copyright' -> TCOP
+                                frame_map = {
+                                    'label': 'TPUB',
+                                    'copyright': 'TCOP',
+                                    'barcode': 'TXXX:BARCODE',
+                                    'asin': 'TXXX:ASIN',
+                                    'catalognumber': 'TXXX:CATALOGNUMBER',
+                                    'isrc': 'TSRC',
+                                    'musicbrainz_recordingid': 'UFID:http://musicbrainz.org', # Complex?
+                                    'musicbrainz_trackid': 'UFID:http://musicbrainz.org',
+                                }
+                                
+                                # Use TXXX as default/fallback
+                                frame_id = frame_map.get(k, f"TXXX:{k.upper()}")
+                                
+                                if k == 'totaldiscs' or k == 'discnumber':
+                                    # Handle TPOS (Disc Number) 1/1
+                                    pass # Already handled mostly or tricky with TPOS 1/2
+                                elif k == 'totaltracks':
+                                    pass # Handled with TRCK
+                                else:
+                                    if frame_id.startswith("TXXX:"):
+                                        desc = frame_id.split(":")[1]
+                                        tags.add(TXXX(encoding=3, desc=desc, text=[str(v)]))
+                                    else:
+                                        # Standard frames
+                                        from mutagen.id3 import TCOP, TPUB, TSRC
+                                        if frame_id == 'TPUB': 
+                                            tags.add(TPUB(encoding=3, text=[str(v)]))
+                                        elif frame_id == 'TCOP': 
+                                            tags.add(TCOP(encoding=3, text=[str(v)]))
+                                        elif frame_id == 'TSRC': 
+                                            tags.add(TSRC(encoding=3, text=[str(v)]))
+                                        
+                            tags.save()
+                        except Exception as e:
+                            logger.error(f"Failed to write extended ID3 tags: {e}")
+
                     # Update in-memory file object for Frontend response
                     file.artist = album.artist
                     file.album = album.title
                     file.year = album.year
+                    file.extended_tags = album.extended_metadata.copy()
 
                     if cover_data:
                         from mutagen.id3 import APIC, ID3
@@ -83,10 +133,17 @@ class TaggingService:
                         if album.year:
                             audio['date'] = str(album.year)
                         
+                        # Extended Metadata (Vorbis Comments)
+                        if album.extended_metadata:
+                            for k, v in album.extended_metadata.items():
+                                # Vorbis comments are usually KEY=VALUE, case insensitive often
+                                audio[k] = str(v)
+
                         # Update in-memory file object
                         file.artist = album.artist
                         file.album = album.title
                         file.year = album.year
+                        file.extended_tags = album.extended_metadata.copy()
 
                         if cover_data:
                             from mutagen.flac import Picture
