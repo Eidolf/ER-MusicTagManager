@@ -1,3 +1,5 @@
+import os
+import sys
 import threading
 import time
 import webbrowser
@@ -6,13 +8,10 @@ import uvicorn
 
 from app.main import app
 
-import sys
-import os
-
 if __name__ == "__main__":
     # Redirect stdout/stderr to devnull if frozen (noconsole mode crash prevention)
     if getattr(sys, 'frozen', False):
-        null = open(os.devnull, 'w')
+        null = open(os.devnull, 'w')  # noqa: SIM115
         sys.stdout = null
         sys.stderr = null
 
