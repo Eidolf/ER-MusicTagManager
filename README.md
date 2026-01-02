@@ -12,9 +12,11 @@ A production-ready, domain-driven automated music organization tool. Scans direc
 
 ### Core Functionality
 - **📂 Smart Scanning**: Recursively scans directories for audio files (MP3, FLAC, OGG, WAV, M4A). Detects existing metadata and local cover art automatically.
-- **🧠 Intelligent Identification**: Uses MusicBrainz to identify albums and tracks, patching missing metadata even for obscure releases.
-- **🏷️ Automated Tagging**: Writes standardized ID3/Vorbis tags directly to files (Artist, Album, Title, Year, Cover Art).
-- **📦 Structured Organization**: Automatically renames and moves files into a clean directory structure: `Output/Artist/Artist - Album (Year)/Title.ext`.
+- **🧠 Intelligent Identification**: Uses MusicBrainz to identify albums and tracks. Supports both **Automatic Matching** and **Manual Search** for difficult releases.
+- **🏷️ Robust Tagging**: Writes standardized **ID3v2.3** tags for maximum compatibility (Windows, macOS, Car Stereos).
+- **🔄 Progressive Workflow**: Fix "Unidentified" albums one by one with a dedicated **Review & Fix** loop. Write changes incrementally without restarting the entire session.
+- **💾 Round-Trip Persistence**: Once a file is tagged with a MusicBrainz ID, the system "remembers" it forever. Re-scanning instantly identifies the album without guessing.
+- **📦 Structured Organization**: Automatically renames and moves files into a clean directory structure: `Output/Artist/Album (Year)/01 - Title.ext`.
 
 ### Technical Highlights
 - **Modern UI**: Built with React + Vite. Features real-time progress bars, diff-views (Previous vs New Metadata), and batch processing.
@@ -35,16 +37,31 @@ git clone https://github.com/Eidolf/ER-MusicTagManager.git
 cd ER-MusicTagManager
 docker-compose up --build
 ```
-Access the dashboard at `http://localhost:5173`.
+Access the dashboard at `http://localhost:5173` (or `http://localhost:8000` for backend API).
 
 ### Workflow Guide
 
 1.  **Configure**: Enter your **Source Directory** (where your messy music is) and **Target Directory** (where clean music goes).
-2.  **🔍 Scan**: Click "Scan Directory". The app will index all files and group them into potential albums.
-3.  **🧠 Identify**: Click "Identify Albums". The system connects to MusicBrainz to find the best match for your files.
-    - *Review*: You can expand any album to see the "Before vs After" metadata changes.
-4.  **🏷️ Tag**: Click "Tag Files". Updated metadata is written to the files.
-5.  **✨ Organize**: Click "Organize Files". Files are moved to the Target Directory in the standardized format.
+2.  **🚀 Start Processing**: The smart wizard runs the pipeline:
+    - **Scan**: Findings files.
+    - **Identify**: Matching against MusicBrainz.
+3.  **review & Fix** (If needed):
+    - If albums are unmatched, you will see a <span style="color:red">**⚠️ Red Banner**</span>.
+    - Click **Review & Fix** to open the details.
+    - Use **Deep Search** to find the correct release manually.
+    - Click **Confirm & Write 💾** to immediately save the correct tags to your files.
+4.  **💾 Write & Organize**:
+    - Once all albums are green (Matched), click **Write & Organize All** in the Green Banner.
+    - Your music is now perfectly tagged and sorted!
+
+## 🛠️ Development
+
+### Pre-Flight Checks
+Before committing code, run the local validator to ensure your changes will pass CI:
+```bash
+./scripts/check-prepush.sh
+```
+This script runs local linters (Ruff, ESLint) and mimics GitHub Actions locally using `act`.
 
 ## 🏗️ Architecture
 
