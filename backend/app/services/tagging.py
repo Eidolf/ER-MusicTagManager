@@ -42,9 +42,11 @@ class TaggingService:
         for i, file in enumerate(album.files):
             try:
                 # Merge Album Metadata with Track Metadata
-                write_metadata = album.extended_metadata.copy()
-                if i < len(album.tracks_metadata):
-                    write_metadata.update(album.tracks_metadata[i])
+                write_metadata = (album.extended_metadata or {}).copy()
+                tracks_meta = album.tracks_metadata or []
+                
+                if i < len(tracks_meta):
+                    write_metadata.update(tracks_meta[i])
 
                 # Basic ID3 Handling for MP3
                 if file.extension == '.mp3':
@@ -56,9 +58,14 @@ class TaggingService:
                     
                     audio['artist'] = album.artist
                     audio['album'] = album.title
+                    
+                    # Track Title
+                    if 'title' in write_metadata:
+                         audio['title'] = write_metadata['title']
+                         
                     if album.year:
                         audio['date'] = str(album.year)
-                    audio.save()
+                    audio.save(v2_version=3)
                     
                     # Extended Metadata (ID3 TXXX)
                     # We need to re-open with mutagen.id3.ID3 to add frames safely 
@@ -66,7 +73,17 @@ class TaggingService:
                         try:
                             from mutagen.id3 import ID3, TXXX
                             tags = ID3(file.path)
+                            
+                            # Skip basic tags that EasyID3 already handled to avoid TXXX duplication
+                            skip_keys = {
+                                'title', 'artist', 'album', 'year', 'date', 'genre', 'organization', 'composer'
+                            }
+                            
                             for k, v in write_metadata.items():
+                                if k in skip_keys:
+                                    continue
+                                    
+                                # Frame Mapping
                                 # Frame Mapping
                                 frame_map = {
                                     'label': 'TPUB',
@@ -116,7 +133,7 @@ class TaggingService:
                                         elif frame_id == 'TDOR':
                                             tags.add(TDOR(encoding=3, text=[str(v)]))
                                         
-                            tags.save()
+                            tags.save(v2_version=3)
                         except Exception as e:
                             logger.error(f"Failed to write extended ID3 tags: {e}")
 
@@ -124,6 +141,8 @@ class TaggingService:
                     file.artist = album.artist
                     file.album = album.title
                     file.year = album.year
+                    if 'title' in write_metadata:
+                        file.title = write_metadata['title']
                     file.extended_tags = write_metadata.copy()
 
                     if cover_data:
