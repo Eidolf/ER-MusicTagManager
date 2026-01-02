@@ -33,9 +33,7 @@ app.add_middleware(
 
 app.include_router(api_router, prefix="/api/v1")
 
-@app.get("/")
-async def root():
-    return {"message": f"Welcome to {settings.APP_NAME}"}
+
 
 # Static Files Mounting (For Portable/Production without Nginx)
 # Check if 'static' folder exists (where we will put the React build)

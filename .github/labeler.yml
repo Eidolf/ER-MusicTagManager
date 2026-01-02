@@ -1,0 +1,26 @@
+# Labeler Configuration
+# Maps changed files to labels on Pull Requests
+
+frontend:
+  - changed-files:
+      - any-glob-to-any-file: 'frontend/**/*'
+
+backend:
+  - changed-files:
+      - any-glob-to-any-file: 'backend/**/*'
+
+docker:
+  - changed-files:
+      - any-glob-to-any-file: 'Dockerfile'
+      - any-glob-to-any-file: 'compose.yml'
+      - any-glob-to-any-file: 'docker-compose.yml'
+      - any-glob-to-any-file: '.dockerignore'
+
+ci-cd:
+  - changed-files:
+      - any-glob-to-any-file: '.github/**/*'
+
+documentation:
+  - changed-files:
+      - any-glob-to-any-file: '**/*.md'
+      - any-glob-to-any-file: '**/docs/**/*'

@@ -57,4 +57,4 @@ The project follows a modular, scalable structure:
 ## 📜 License
 
 Distributed under the **GNU standard Affero General Public License v3.0 (AGPL-3.0)**. See `LICENSE` for more information.
-# ER-MusicTagManager
+

@@ -71,7 +71,7 @@ async def scan_directory(request: ScanRequest) -> list[Album]:
             stat = file_path.stat()
             
             # Read metadata
-            title = None
+            # title = None # usage optimization
             artist = None
             album_name = None
             year = None
@@ -79,7 +79,7 @@ async def scan_directory(request: ScanRequest) -> list[Album]:
             try:
                 f = mutagen.File(file_path, easy=True)
                 if f:
-                    title = f.get('title', [None])[0]
+                    f.get('title', [None])[0]
                     artist = f.get('artist', [None])[0]
                     album_name = f.get('album', [None])[0]
                     date = f.get('date', [None])[0] 
@@ -96,15 +96,34 @@ async def scan_directory(request: ScanRequest) -> list[Album]:
             except Exception as e:
                 print(f"Error reading metadata for {file}: {e}")
 
+
+
+            # Extended Metadata Reading (ID3 v2.3/2.4) to find MusicBrainz IDs
+            mb_release_id = None
+            if file_path.suffix.lower() == '.mp3':
+                try:
+                    from mutagen.id3 import ID3
+                    tags = ID3(str(file_path))
+                    # TXXX:MusicBrainz Release Id
+                    # Mutagen access TXXX frames: TXXX:desc
+                    txxx_frames = tags.getall("TXXX") # returns list of TXXX frames
+                    for frame in txxx_frames:
+                        if frame.desc.lower() == 'musicbrainz release id':
+                            mb_release_id = str(frame.text[0])
+                        # Also could read other IDs here
+                except Exception:
+                    # Usually means no id3 tag or error reading
+                    pass
+
             music_file = MusicFile(
                 filename=file,
                 path=file_path,
                 extension=file_path.suffix.lower(),
                 size_bytes=stat.st_size,
-                title=title,
                 artist=artist,
                 album=album_name,
-                year=year
+                year=year,
+                extended_tags={'musicbrainz_albumid': mb_release_id} if mb_release_id else {}
             )
             album_files.append(music_file)
 
@@ -143,14 +162,25 @@ async def scan_directory(request: ScanRequest) -> list[Album]:
             if local_cover:
                 break
 
+        # Check consensus MBID
+        mb_ids = [
+            f.extended_tags.get('musicbrainz_albumid') 
+            for f in album_files if f.extended_tags.get('musicbrainz_albumid')
+        ]
+        consensus_mbid = None
+        if mb_ids and len(mb_ids) == len(album_files) and len(set(mb_ids)) == 1:
+             consensus_mbid = mb_ids[0]
+
         album = Album(
             id=str(root_path),
-            title=detected_title or folder_name,
+            title=detected_title or "Unknown Album",
             artist=detected_artist or "Unknown Artist",
             year=detected_year,
             path=root_path,
             files=album_files,
-            status="Pending",
+            # If we have ID, it's effectively matched but we need to fetch details. Let's keep Pending but pass ID.
+            status="Match" if consensus_mbid else "Pending",
+            mb_release_id=consensus_mbid,
             local_cover_path=local_cover
         )
         albums_map[str(root_path)] = album
@@ -162,6 +192,24 @@ async def identify_albums(albums: list[Album]) -> list[Album]:
     service = IdentificationService()
     return await service.identify_all(albums)
 
+class SearchReleaseRequest(BaseModel):
+    artist: str
+    album: str
+
+@router.post("/identify/search")
+async def search_releases(request: SearchReleaseRequest) -> list[dict]:
+    service = IdentificationService()
+    return await service.search_releases(request.artist, request.album)
+
+class ResolveReleaseRequest(BaseModel):
+    album: Album
+    mb_release_id: str
+
+@router.post("/identify/resolve")
+async def resolve_release(request: ResolveReleaseRequest) -> Album:
+    service = IdentificationService()
+    return await service.resolve_release(request.album, request.mb_release_id)
+
 @router.post("/tag")
 async def tag_files(albums: list[Album]) -> list[Album]:
     service = TaggingService()
@@ -171,3 +219,15 @@ async def tag_files(albums: list[Album]) -> list[Album]:
 async def organize_files(request: OrganizeRequest) -> dict:
     service = OrganizationService(request.output_path)
     return await service.organize_all(request.albums)
+@router.post("/system/shutdown")
+async def shutdown_application():
+    import signal
+    import threading
+    import time
+    
+    def kill_server():
+        time.sleep(1)
+        os.kill(os.getpid(), signal.SIGINT)
+        
+    threading.Thread(target=kill_server).start()
+    return {"status": "shutting_down", "message": "Server will shutdown in 1 second"}
