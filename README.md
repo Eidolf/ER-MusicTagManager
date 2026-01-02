@@ -1,7 +1,7 @@
 # ER-MusicTagManager
 
 ![CI Status](https://github.com/Eidolf/ER-MusicTagManager/actions/workflows/ci-orchestrator.yml/badge.svg?branch=nightly)
-![Release](https://img.shields.io/github/v/release/Eidolf/ER-MusicTagManager?include_prereleases&style=flat-square)
+![Release](https://img.shields.io/github/v/tag/Eidolf/ER-MusicTagManager?include_prereleases&style=flat-square&label=Release)
 ![License](https://img.shields.io/github/license/Eidolf/ER-MusicTagManager?style=flat-square)
 
 ![Project Logo](./images/logo.png)
