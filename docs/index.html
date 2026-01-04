@@ -63,9 +63,10 @@
             <div class="flex gap-6 items-center">
                 <a href="https://github.com/Eidolf/ER-MusicTagManager"
                     class="text-gray-400 hover:text-white transition-colors text-sm font-medium">GitHub</a>
-                <a href="https://github.com/Eidolf/ER-MusicTagManager/releases"
-                    class="bg-white text-black px-5 py-2 rounded-full font-bold text-sm hover:bg-gray-200 transition-transform transform hover:scale-105">Download
-                    v0.1.0</a>
+                <a id="nav-download" href="https://github.com/Eidolf/ER-MusicTagManager/releases"
+                    class="bg-white text-black px-5 py-2 rounded-full font-bold text-sm hover:bg-gray-200 transition-transform transform hover:scale-105">
+                    Download Latest
+                </a>
             </div>
         </div>
     </nav>
@@ -81,9 +82,9 @@
 
             <!-- Text Content -->
             <div class="text-left space-y-8 animate-fade-in-up">
-                <div
+                <div id="version-badge"
                     class="inline-block px-4 py-1 rounded-full border border-cyan-500/30 bg-cyan-900/10 text-cyan-400 text-xs font-bold tracking-wider uppercase mb-2">
-                    Production Ready v1.0
+                    Latest Release
                 </div>
                 <h1 class="text-5xl md:text-7xl font-extrabold leading-tight tracking-tight">
                     Bring Order to <br>
@@ -96,13 +97,13 @@
                     with domain-driven precision.
                 </p>
                 <div class="flex flex-col sm:flex-row gap-4 pt-4">
-                    <a href="https://github.com/Eidolf/ER-MusicTagManager/releases"
+                    <a id="hero-download" href="https://github.com/Eidolf/ER-MusicTagManager/releases"
                         class="px-8 py-4 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-xl font-bold text-white shadow-lg shadow-cyan-500/25 hover:shadow-cyan-500/50 transition-all transform hover:-translate-y-1">
-                        Get Started Free
+                        Download Now
                     </a>
-                    <a href="#features"
+                    <a href="#gallery"
                         class="px-8 py-4 glass rounded-xl font-bold text-white hover:bg-white/10 transition-all">
-                        View Features
+                        View Gallery
                     </a>
                 </div>
                 <div class="flex gap-4 text-xs text-gray-500 font-mono pt-4">
@@ -118,8 +119,8 @@
             <!-- Visual Content -->
             <div class="relative perspective-1000">
                 <div
-                    class="relative z-10 rounded-2xl overflow-hidden shadow-2xl shadow-cyan-900/50 border border-white/10 glass p-2 floating">
-                    <img src="./assets/mockup.png" alt="App Dashboard" class="w-full rounded-xl">
+                    class="relative z-10 rounded-2xl overflow-hidden shadow-2xl shadow-cyan-900/50 border border-white/10 glass p-1 floating">
+                    <img src="./assets/dashboard.png" alt="App Dashboard" class="w-full rounded-xl">
                 </div>
                 <!-- Decorative Blobs -->
                 <div class="absolute -top-20 -right-20 w-96 h-96 bg-blue-600/20 rounded-full blur-[100px] -z-10"></div>
@@ -127,6 +128,58 @@
                 </div>
             </div>
 
+        </div>
+    </section>
+
+    <!-- Gallery Section -->
+    <section id="gallery" class="py-20 bg-gray-900/50 relative">
+        <div class="max-w-7xl mx-auto px-6">
+            <div class="text-center mb-16">
+                <h2 class="text-3xl md:text-4xl font-bold mb-4">Interface Gallery</h2>
+                <p class="text-gray-400">Designed for clarity and efficiency.</p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <!-- Large Item -->
+                <div class="md:col-span-2 group relative rounded-2xl overflow-hidden border border-white/10 shadow-2xl">
+                    <div
+                        class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent z-10 opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-8">
+                        <div>
+                            <h3 class="text-2xl font-bold text-white">Main Dashboard</h3>
+                            <p class="text-gray-300">Real-time tracking of scanning, identification, and organization
+                                progress.</p>
+                        </div>
+                    </div>
+                    <img src="./assets/dashboard.png"
+                        class="w-full transition-transform duration-700 group-hover:scale-105" alt="Dashboard">
+                </div>
+
+                <!-- Small Item 1 -->
+                <div class="group relative rounded-2xl overflow-hidden border border-white/10 shadow-2xl">
+                    <div
+                        class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent z-10 opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-8">
+                        <div>
+                            <h3 class="text-xl font-bold text-white">Smart Identification</h3>
+                            <p class="text-gray-300">Detailed metadata matching with MusicBrainz.</p>
+                        </div>
+                    </div>
+                    <img src="./assets/details.png"
+                        class="w-full transition-transform duration-700 group-hover:scale-105" alt="Identification">
+                </div>
+
+                <!-- Small Item 2 -->
+                <div class="group relative rounded-2xl overflow-hidden border border-white/10 shadow-2xl">
+                    <div
+                        class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent z-10 opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-8">
+                        <div>
+                            <h3 class="text-xl font-bold text-white">Diff View</h3>
+                            <p class="text-gray-300">Precise control over tag changes.</p>
+                        </div>
+                    </div>
+                    <img src="./assets/diff.png" class="w-full transition-transform duration-700 group-hover:scale-105"
+                        alt="Metadata Diff">
+                </div>
+            </div>
         </div>
     </section>
 
@@ -184,16 +237,47 @@
     <!-- Footer -->
     <footer class="border-t border-gray-800 py-12 bg-gray-950">
         <div class="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-6">
-            <div class="text-gray-500 text-sm">
-                &copy; 2025 ER-MusicTagManager. Open Source (AGPL-3.0).
+            <div class="file-badges flex gap-2 order-2 md:order-1">
+                <img src="https://github.com/Eidolf/ER-MusicTagManager/actions/workflows/ci-orchestrator.yml/badge.svg?branch=nightly"
+                    alt="CI Status">
+                <img src="https://img.shields.io/github/v/tag/Eidolf/ER-MusicTagManager?include_prereleases&style=flat-square&label=Release"
+                    alt="Release">
+                <img src="https://img.shields.io/github/license/Eidolf/ER-MusicTagManager?style=flat-square"
+                    alt="License">
             </div>
-            <div class="flex gap-6">
-                <a href="#" class="text-gray-400 hover:text-white transition-colors">Documentation</a>
-                <a href="#" class="text-gray-400 hover:text-white transition-colors">Issues</a>
-                <a href="#" class="text-gray-400 hover:text-white transition-colors">Privacy</a>
+            <div class="text-gray-500 text-sm order-1 md:order-2">
+                &copy; 2025 ER-MusicTagManager. Open Source (AGPL-3.0).
             </div>
         </div>
     </footer>
+
+    <!-- Dynamic Version Script -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            fetch('https://api.github.com/repos/Eidolf/ER-MusicTagManager/releases/latest')
+                .then(response => {
+                    if (!response.ok) throw new Error("No release found");
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.tag_name) {
+                        const versionText = `Download ${data.tag_name}`;
+                        document.getElementById('nav-download').innerText = versionText;
+                        document.getElementById('hero-download').innerText = versionText;
+                        document.getElementById('version-badge').innerText = `Latest: ${data.tag_name}`;
+
+                        // Update links
+                        if (data.html_url) {
+                            document.getElementById('nav-download').href = data.html_url;
+                            document.getElementById('hero-download').href = data.html_url;
+                        }
+                    }
+                })
+                .catch(err => {
+                    console.log("Could not fetch latest release, using default.");
+                });
+        });
+    </script>
 
 </body>
 
