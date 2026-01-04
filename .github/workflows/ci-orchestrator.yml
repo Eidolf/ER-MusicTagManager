@@ -9,6 +9,7 @@ on:
       - '.github/ISSUE_TEMPLATE/**'
       - '.github/pull_request_template.md'
       - '.github/labeler.yml'
+      - 'docs/**'
   pull_request:
     branches: [ "main", "master" ]
     paths-ignore:
@@ -17,6 +18,7 @@ on:
       - '.github/ISSUE_TEMPLATE/**'
       - '.github/pull_request_template.md'
       - '.github/labeler.yml'
+      - 'docs/**'
 
 jobs:
   lint:

@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ER-MusicTagManager | Master Your Music Library</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        .glass {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .text-glow {
+            text-shadow: 0 0 20px rgba(56, 189, 248, 0.5);
+        }
+
+        .hero-bg {
+            background-image: url('./assets/hero.png');
+            background-size: cover;
+            background-position: center;
+        }
+
+        .floating {
+            animation: float 6s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0% {
+                transform: translateY(0px);
+            }
+
+            50% {
+                transform: translateY(-20px);
+            }
+
+            100% {
+                transform: translateY(0px);
+            }
+        }
+    </style>
+</head>
+
+<body class="bg-gray-950 text-white overflow-x-hidden antialiased selection:bg-cyan-500 selection:text-white">
+
+    <!-- Navigation -->
+    <nav class="fixed w-full z-50 glass border-b-0 border-white/5">
+        <div class="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 bg-gradient-to-tr from-cyan-500 to-blue-600 rounded-lg"></div>
+                <span class="font-bold text-xl tracking-tight">ER-MusicTagManager</span>
+            </div>
+            <div class="flex gap-6 items-center">
+                <a href="https://github.com/Eidolf/ER-MusicTagManager"
+                    class="text-gray-400 hover:text-white transition-colors text-sm font-medium">GitHub</a>
+                <a href="https://github.com/Eidolf/ER-MusicTagManager/releases"
+                    class="bg-white text-black px-5 py-2 rounded-full font-bold text-sm hover:bg-gray-200 transition-transform transform hover:scale-105">Download
+                    v0.1.0</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="relative min-h-screen flex items-center justify-center pt-20 overflow-hidden">
+        <!-- Background Overlay -->
+        <div class="absolute inset-0 hero-bg opacity-40"></div>
+        <div class="absolute inset-0 bg-gradient-to-t from-gray-950 via-gray-950/80 to-transparent"></div>
+
+        <div
+            class="relative z-10 max-w-7xl mx-auto px-6 text-center grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+
+            <!-- Text Content -->
+            <div class="text-left space-y-8 animate-fade-in-up">
+                <div
+                    class="inline-block px-4 py-1 rounded-full border border-cyan-500/30 bg-cyan-900/10 text-cyan-400 text-xs font-bold tracking-wider uppercase mb-2">
+                    Production Ready v1.0
+                </div>
+                <h1 class="text-5xl md:text-7xl font-extrabold leading-tight tracking-tight">
+                    Bring Order to <br>
+                    <span
+                        class="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-600 text-glow">Sonic
+                        Chaos</span>
+                </h1>
+                <p class="text-lg text-gray-400 max-w-md leading-relaxed">
+                    Automated music organization powered by MusicBrainz. Scan, identify, and tag your entire library
+                    with domain-driven precision.
+                </p>
+                <div class="flex flex-col sm:flex-row gap-4 pt-4">
+                    <a href="https://github.com/Eidolf/ER-MusicTagManager/releases"
+                        class="px-8 py-4 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-xl font-bold text-white shadow-lg shadow-cyan-500/25 hover:shadow-cyan-500/50 transition-all transform hover:-translate-y-1">
+                        Get Started Free
+                    </a>
+                    <a href="#features"
+                        class="px-8 py-4 glass rounded-xl font-bold text-white hover:bg-white/10 transition-all">
+                        View Features
+                    </a>
+                </div>
+                <div class="flex gap-4 text-xs text-gray-500 font-mono pt-4">
+                    <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-green-500"></span>
+                        Windows</span>
+                    <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-green-500"></span>
+                        Linux</span>
+                    <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-green-500"></span> Docker
+                    </span>
+                </div>
+            </div>
+
+            <!-- Visual Content -->
+            <div class="relative perspective-1000">
+                <div
+                    class="relative z-10 rounded-2xl overflow-hidden shadow-2xl shadow-cyan-900/50 border border-white/10 glass p-2 floating">
+                    <img src="./assets/mockup.png" alt="App Dashboard" class="w-full rounded-xl">
+                </div>
+                <!-- Decorative Blobs -->
+                <div class="absolute -top-20 -right-20 w-96 h-96 bg-blue-600/20 rounded-full blur-[100px] -z-10"></div>
+                <div class="absolute -bottom-20 -left-20 w-96 h-96 bg-cyan-500/20 rounded-full blur-[100px] -z-10">
+                </div>
+            </div>
+
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section id="features" class="py-32 relative bg-gray-950">
+        <div class="max-w-7xl mx-auto px-6">
+            <div class="text-center mb-20">
+                <h2 class="text-3xl md:text-4xl font-bold mb-4">Engineered for Perfectionists</h2>
+                <p class="text-gray-400">Advanced tools for the serious music collector.</p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <!-- Feature 1 -->
+                <div
+                    class="p-8 rounded-3xl bg-gray-900/50 border border-gray-800 hover:border-cyan-500/50 transition-all duration-300 hover:shadow-2xl hover:shadow-cyan-900/10 group">
+                    <div
+                        class="w-14 h-14 bg-gray-800 rounded-2xl flex items-center justify-center text-3xl mb-6 group-hover:scale-110 transition-transform">
+                        🧠</div>
+                    <h3 class="text-xl font-bold mb-3 text-white">Smart Identification</h3>
+                    <p class="text-gray-400 leading-relaxed">
+                        Uses acoustic fingerprinting and MusicBrainz metadata to identify even the most obscure tracks
+                        correctly.
+                    </p>
+                </div>
+
+                <!-- Feature 2 -->
+                <div
+                    class="p-8 rounded-3xl bg-gray-900/50 border border-gray-800 hover:border-purple-500/50 transition-all duration-300 hover:shadow-2xl hover:shadow-purple-900/10 group">
+                    <div
+                        class="w-14 h-14 bg-gray-800 rounded-2xl flex items-center justify-center text-3xl mb-6 group-hover:scale-110 transition-transform">
+                        🏷️</div>
+                    <h3 class="text-xl font-bold mb-3 text-white">Robust Tagging</h3>
+                    <p class="text-gray-400 leading-relaxed">
+                        Writes standardized ID3v2.3 tags directly to files. Ensures compatibility across all players,
+                        cars, and devices.
+                    </p>
+                </div>
+
+                <!-- Feature 3 -->
+                <div
+                    class="p-8 rounded-3xl bg-gray-900/50 border border-gray-800 hover:border-green-500/50 transition-all duration-300 hover:shadow-2xl hover:shadow-green-900/10 group">
+                    <div
+                        class="w-14 h-14 bg-gray-800 rounded-2xl flex items-center justify-center text-3xl mb-6 group-hover:scale-110 transition-transform">
+                        📂</div>
+                    <h3 class="text-xl font-bold mb-3 text-white">Clean Organization</h3>
+                    <p class="text-gray-400 leading-relaxed">
+                        Automatically moves and renames files into a canonical structure: <span
+                            class="font-mono text-xs bg-gray-800 px-1 rounded">Artist/Album/Title.ext</span>.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="border-t border-gray-800 py-12 bg-gray-950">
+        <div class="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-6">
+            <div class="text-gray-500 text-sm">
+                &copy; 2025 ER-MusicTagManager. Open Source (AGPL-3.0).
+            </div>
+            <div class="flex gap-6">
+                <a href="#" class="text-gray-400 hover:text-white transition-colors">Documentation</a>
+                <a href="#" class="text-gray-400 hover:text-white transition-colors">Issues</a>
+                <a href="#" class="text-gray-400 hover:text-white transition-colors">Privacy</a>
+            </div>
+        </div>
+    </footer>
+
+</body>
+
+</html>
