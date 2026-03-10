@@ -12,6 +12,7 @@ services:
       - ./data/output:/data/output
       # Mount user's music directory for direct access testing
       - /home/dev/Music:/home/dev/Music
+      - /home/dev/Downloads:/home/dev/Downloads
     environment:
       - APP_ENV=development
       - LOG_LEVEL=DEBUG

@@ -6,15 +6,21 @@ import { fileURLToPath } from 'url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
-// Try to read VERSION file
-let appVersion = 'dev'
-try {
-    const versionPath = path.resolve(__dirname, '../VERSION')
-    if (fs.existsSync(versionPath)) {
-        appVersion = fs.readFileSync(versionPath, 'utf-8').trim()
+// Try to read VERSION file or use env var (injected by CI)
+let appVersion = process.env.VITE_APP_VERSION;
+
+if (!appVersion) {
+    try {
+        const versionPath = path.resolve(__dirname, '../VERSION')
+        if (fs.existsSync(versionPath)) {
+            appVersion = fs.readFileSync(versionPath, 'utf-8').trim()
+        } else {
+            appVersion = 'dev'
+        }
+    } catch (e) {
+        console.warn("Could not read VERSION file", e)
+        appVersion = 'dev'
     }
-} catch (e) {
-    console.warn("Could not read VERSION file", e)
 }
 
 // https://vitejs.dev/config/

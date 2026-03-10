@@ -100,17 +100,20 @@ const MetadataDiffModal = ({ file, original, onClose }: { file: MusicFile, origi
     )
 }
 
-const DetailsModal = ({ title, data, onClose, type, onDiff, onManualIdentify, onWrite }: {
+const DetailsModal = ({ title, data, onClose, type, onDiff, onManualIdentify, onWrite, onUpdateCover }: {
     title: string,
     data: Album[],
     onClose: () => void,
     type: string,
     onDiff?: (file: MusicFile) => void,
     onManualIdentify?: (album: Album) => void,
-    onWrite?: (album: Album) => void
+    onWrite?: (album: Album) => void,
+    onUpdateCover?: (albumId: string, url: string) => void
 }) => {
     // State moved here - SAFE now
     const [expandedAlbumId, setExpandedAlbumId] = useState<string | null>(null);
+    const [editingCoverId, setEditingCoverId] = useState<string | null>(null);
+    const [coverUrlInput, setCoverUrlInput] = useState("");
 
     return (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-8" onClick={onClose}>
@@ -127,13 +130,90 @@ const DetailsModal = ({ title, data, onClose, type, onDiff, onManualIdentify, on
                             <div key={idx} className={`p-4 rounded-lg border flex flex-col gap-4 ${album.status?.startsWith('Error') || album.status === 'API Error' ? 'bg-red-900/20 border-red-700' : 'bg-gray-900/50 border-gray-700'}`}>
                                 <div className="flex gap-4">
                                     {/* Cover Art Preview */}
-                                    {album.cover_art_url ? (
-                                        <div className="w-24 h-24 flex-shrink-0 bg-gray-800 rounded overflow-hidden">
-                                            <img src={album.cover_art_url} alt="Cover" className="w-full h-full object-cover" />
-                                        </div>
-                                    ) : (
-                                        <div className="w-24 h-24 flex-shrink-0 bg-gray-800 rounded flex items-center justify-center text-gray-500 text-xs">No Cover</div>
-                                    )}
+                                    <div
+                                        className={`w-24 h-24 flex-shrink-0 bg-gray-800 rounded relative overflow-hidden flex flex-col items-center justify-center text-gray-500 text-xs text-center border ${album.cover_art_url ? 'border-gray-700' : 'border-dashed border-gray-600'} ${onUpdateCover ? 'cursor-pointer hover:opacity-80 transition-opacity group' : ''}`}
+                                        onClick={() => {
+                                            if (onUpdateCover && !album.cover_art_url) {
+                                                const query = encodeURIComponent(`${album.artist} ${album.title} cover art`);
+                                                window.open(`https://www.google.com/search?q=${query}&tbm=isch&tbs=isz:l`, '_blank');
+                                                setCoverUrlInput("");
+                                                setEditingCoverId(album.id);
+                                            }
+                                        }}
+                                        title={onUpdateCover ? "Click to search for and manually set/override the cover image" : (album.cover_art_url ? "Cover Art" : "No Cover Available")}
+                                    >
+                                        {album.cover_art_url ? (
+                                            <>
+                                                <img src={album.cover_art_url} alt="Cover" className="w-full h-full object-cover" />
+                                                {onUpdateCover && (
+                                                    <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity p-2">
+                                                        <span className="text-white font-bold tracking-wider text-[10px] mb-2">CHANGE COVER</span>
+                                                        <button
+                                                            className="bg-blue-600 hover:bg-blue-500 text-white text-[10px] px-2 py-1 rounded w-full mb-1"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                const query = encodeURIComponent(`${album.artist} ${album.title} cover art`);
+                                                                window.open(`https://www.google.com/search?q=${query}&tbm=isch&tbs=isz:l`, '_blank');
+                                                                setCoverUrlInput("");
+                                                                setEditingCoverId(album.id);
+                                                            }}
+                                                        >
+                                                            1. Search Web
+                                                        </button>
+                                                        <button
+                                                            className="bg-green-600 hover:bg-green-500 text-white text-[10px] px-2 py-1 rounded w-full"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setCoverUrlInput("");
+                                                                setEditingCoverId(album.id);
+                                                            }}
+                                                        >
+                                                            2. Paste URL
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </>
+                                        ) : (
+                                            <div className="p-1 flex flex-col items-center justify-center h-full w-full">
+                                                <span className="text-xl mb-1 block">🔍</span>
+                                                <span>No Cover<br />(Click to Search)</span>
+                                            </div>
+                                        )}
+                                        {/* Inline Input Overlay */}
+                                        {editingCoverId === album.id && (
+                                            <div className="absolute inset-0 bg-gray-900 flex flex-col items-center justify-center p-2 z-10" onClick={e => e.stopPropagation()}>
+                                                <input
+                                                    autoFocus
+                                                    type="text"
+                                                    value={coverUrlInput}
+                                                    onChange={e => setCoverUrlInput(e.target.value)}
+                                                    placeholder="Paste Image URL..."
+                                                    className="w-full text-xs p-1 mb-2 bg-gray-800 border border-gray-600 text-white rounded"
+                                                    onKeyDown={e => {
+                                                        if (e.key === 'Enter') {
+                                                            if (coverUrlInput.trim() && onUpdateCover) onUpdateCover(album.id, coverUrlInput.trim());
+                                                            setEditingCoverId(null);
+                                                        }
+                                                        if (e.key === 'Escape') setEditingCoverId(null);
+                                                    }}
+                                                />
+                                                <div className="flex gap-1 w-full justify-between">
+                                                    <button
+                                                        className="bg-red-600 hover:bg-red-500 text-white text-[10px] px-2 py-1 rounded"
+                                                        onClick={(e) => { e.stopPropagation(); setEditingCoverId(null); }}
+                                                    >Cancel</button>
+                                                    <button
+                                                        className="bg-green-600 hover:bg-green-500 text-white text-[10px] px-2 py-1 rounded"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            if (coverUrlInput.trim() && onUpdateCover) onUpdateCover(album.id, coverUrlInput.trim());
+                                                            setEditingCoverId(null);
+                                                        }}
+                                                    >Save</button>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
 
                                     <div className="flex-grow">
                                         <div className="flex justify-between items-start mb-2">
@@ -141,6 +221,7 @@ const DetailsModal = ({ title, data, onClose, type, onDiff, onManualIdentify, on
                                                 <h3 className="font-bold text-lg text-white">{album.artist} - {album.title} {album.year && `(${album.year})`}</h3>
                                                 <div className="text-sm text-gray-400">
                                                     <p>Path: <span className="font-mono text-xs text-gray-500">{album.path}</span></p>
+                                                    <p className="mt-1">Tracks in folder: <span className="font-bold text-gray-300">{album.files.length}</span></p>
                                                     {album.mb_release_id && (
                                                         <p className="mt-1">MBID: <span className="font-mono text-xs text-primary">{album.mb_release_id}</span></p>
                                                     )}
@@ -286,12 +367,14 @@ const DetailsModal = ({ title, data, onClose, type, onDiff, onManualIdentify, on
     );
 };
 
-const ManualSearchModal = ({ album, onClose, onResolve }: { album: Album, onClose: () => void, onResolve: (updatedAlbum: Album) => void }) => {
+const ManualSearchModal = ({ album, onClose, onResolve, onUpdateCover }: { album: Album, onClose: () => void, onResolve: (updatedAlbum: Album) => void, onUpdateCover?: (albumId: string, url: string) => void }) => {
     const [artistQuery, setArtistQuery] = useState(album.artist === "Unknown Artist" ? "" : album.artist);
     const [albumQuery, setAlbumQuery] = useState(album.title);
     const [results, setResults] = useState<MusicBrainzRelease[]>([]);
     const [loading, setLoading] = useState(false);
     const [analyzing, setAnalyzing] = useState(false);
+    const [isEditingCover, setIsEditingCover] = useState(false);
+    const [coverUrlInput, setCoverUrlInput] = useState("");
 
     const handleSearch = async () => {
         setLoading(true);
@@ -338,7 +421,92 @@ const ManualSearchModal = ({ album, onClose, onResolve }: { album: Album, onClos
                     <button onClick={onClose} className="text-gray-400 hover:text-white text-2xl">&times;</button>
                 </div>
 
-                <div className="flex gap-4 mb-6">
+                <div className="flex gap-4 mb-6 items-center">
+                    {/* Add Current Cover Preview to Modal */}
+                    <div
+                        className={`w-16 h-16 flex-shrink-0 bg-gray-800 rounded relative overflow-hidden flex flex-col items-center justify-center text-gray-500 text-[10px] text-center border ${album.cover_art_url ? 'border-gray-700' : 'border-dashed border-gray-600'} ${onUpdateCover ? 'cursor-pointer hover:opacity-80 transition-opacity group' : ''}`}
+                        onClick={() => {
+                            if (onUpdateCover && !album.cover_art_url) {
+                                const query = encodeURIComponent(`${album.artist} ${album.title} cover art`);
+                                window.open(`https://www.google.com/search?q=${query}&tbm=isch&tbs=isz:l`, '_blank');
+                                setCoverUrlInput("");
+                                setIsEditingCover(true);
+                            }
+                        }}
+                        title={onUpdateCover ? "Click to search for and manually set/override the cover image for this album" : (album.cover_art_url ? "Cover Art" : "No Cover Available")}
+                    >
+                        {album.cover_art_url ? (
+                            <>
+                                <img src={album.cover_art_url} alt="Cover" className="w-full h-full object-cover" />
+                                {onUpdateCover && (
+                                    <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity p-1">
+                                        <button
+                                            className="bg-blue-600 hover:bg-blue-500 text-white text-[8px] px-1 py-1 rounded w-full mb-1"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                const query = encodeURIComponent(`${album.artist} ${album.title} cover art`);
+                                                window.open(`https://www.google.com/search?q=${query}&tbm=isch&tbs=isz:l`, '_blank');
+                                                setCoverUrlInput("");
+                                                setIsEditingCover(true);
+                                            }}
+                                        >
+                                            Search
+                                        </button>
+                                        <button
+                                            className="bg-green-600 hover:bg-green-500 text-white text-[8px] px-1 py-1 rounded w-full"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setCoverUrlInput("");
+                                                setIsEditingCover(true);
+                                            }}
+                                        >
+                                            Paste
+                                        </button>
+                                    </div>
+                                )}
+                            </>
+                        ) : (
+                            <div className="p-1 flex flex-col items-center justify-center h-full w-full">
+                                <span className="text-base mb-0.5 block">🔍</span>
+                                <span>No Cover</span>
+                            </div>
+                        )}
+                        {/* Inline Input Overlay */}
+                        {isEditingCover && (
+                            <div className="absolute inset-0 bg-gray-900 flex flex-col items-center justify-center p-1 z-10" onClick={e => e.stopPropagation()}>
+                                <input
+                                    autoFocus
+                                    type="text"
+                                    value={coverUrlInput}
+                                    onChange={e => setCoverUrlInput(e.target.value)}
+                                    placeholder="URL..."
+                                    className="w-full text-[10px] p-1 mb-1 bg-gray-800 border border-gray-600 text-white rounded"
+                                    onKeyDown={e => {
+                                        if (e.key === 'Enter') {
+                                            if (coverUrlInput.trim() && onUpdateCover) onUpdateCover(album.id, coverUrlInput.trim());
+                                            setIsEditingCover(false);
+                                        }
+                                        if (e.key === 'Escape') setIsEditingCover(false);
+                                    }}
+                                />
+                                <div className="flex gap-1 w-full justify-between">
+                                    <button
+                                        className="bg-red-600 hover:bg-red-500 text-white text-[8px] px-1 rounded"
+                                        onClick={(e) => { e.stopPropagation(); setIsEditingCover(false); }}
+                                    >X</button>
+                                    <button
+                                        className="bg-green-600 hover:bg-green-500 text-white text-[8px] px-1 rounded flex-1"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (coverUrlInput.trim() && onUpdateCover) onUpdateCover(album.id, coverUrlInput.trim());
+                                            setIsEditingCover(false);
+                                        }}
+                                    >Save</button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
                     <input
                         className="bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white flex-1"
                         placeholder="Artist"
@@ -368,7 +536,7 @@ const ManualSearchModal = ({ album, onClose, onResolve }: { album: Album, onClos
 
                 <div className="space-y-2">
                     {results.map((r) => {
-                        const hasCover = r["cover-art-archive"]?.front ? "📷" : "";
+                        const hasCover = r["cover-art-archive"]?.front;
                         const trackCount = r["track-count"] || "?";
                         const year = r["date"] || "Unknown";
                         const label = r["label-info"]?.[0]?.label?.name || "-";
@@ -377,12 +545,27 @@ const ManualSearchModal = ({ album, onClose, onResolve }: { album: Album, onClos
                             <div key={r.id} className="bg-gray-700/50 p-3 rounded flex justify-between items-center hover:bg-gray-700 transition">
                                 <div>
                                     <div className="font-bold text-white">{r.title} <span className="text-sm font-normal text-gray-400">by {r["artist-credit"]?.[0]?.name}</span></div>
-                                    <div className="text-xs text-gray-400 flex gap-4 mt-1">
+                                    <div className="text-xs text-gray-400 flex items-center gap-4 mt-1">
                                         <span>Year: {year}</span>
                                         <span>Tracks: {trackCount}</span>
                                         <span>Label: {label}</span>
                                         <span>Score: {r.score}</span>
-                                        <span>{hasCover}</span>
+                                        {hasCover ? (
+                                            <span className="bg-green-900 border-green-500 text-green-300 px-2 py-0.5 rounded text-[10px] font-bold uppercase border shadow-sm flex items-center gap-1">
+                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
+                                                    <path fillRule="evenodd" d="M1 5.25A2.25 2.25 0 013.25 3h13.5A2.25 2.25 0 0119 5.25v9.5A2.25 2.25 0 0116.75 17H3.25A2.25 2.25 0 011 14.75v-9.5zm1.5 5.81v3.69c0 .414.336.75.75.75h13.5a.75.75 0 00.75-.75v-2.69l-2.22-2.219a2.25 2.25 0 00-3.182 0l-1.44 1.439-2.25-1.5a2.25 2.25 0 00-2.438.037L2.5 11.06zm15-4.31l-3.22 3.22a.75.75 0 00-1.06 0L11.78 8.53a.75.75 0 00-1.06 0l-8.22 8.22v-3.69l3.22-3.22a.75.75 0 011.06 0l1.44 1.439 2.25-1.5a.75.75 0 01.813-.037L17.5 11.06v-4.31z" clipRule="evenodd" />
+                                                    <path d="M5.5 8a1.5 1.5 0 100-3 1.5 1.5 0 000 3z" />
+                                                </svg>
+                                                YES Cover
+                                            </span>
+                                        ) : (
+                                            <span className="bg-red-900 border-red-500 text-red-300 px-2 py-0.5 rounded text-[10px] font-bold uppercase border shadow-sm flex items-center gap-1">
+                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
+                                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z" clipRule="evenodd" />
+                                                </svg>
+                                                NO Cover
+                                            </span>
+                                        )}
                                     </div>
                                 </div>
                                 <button
@@ -753,6 +936,13 @@ function App() {
         }
     };
 
+    const handleUpdateCover = (albumId: string, url: string) => {
+        const updateAlbum = (a: Album) => a.id === albumId ? { ...a, cover_art_url: url } : a;
+        setScannedAlbums(prev => prev.map(updateAlbum));
+        setIdentifiedAlbums(prev => prev.map(updateAlbum));
+        setTaggedAlbums(prev => prev.map(updateAlbum));
+    };
+
     const modalInfo = getModalData();
     const unidentifiedCount = identifiedAlbums.filter(a => a.status !== 'Match').length;
 
@@ -967,6 +1157,7 @@ function App() {
                     onDiff={handleDiff}
                     onManualIdentify={setManualFixAlbum}
                     onWrite={handleReprocess}
+                    onUpdateCover={handleUpdateCover}
                 />
             )}
 
@@ -983,6 +1174,7 @@ function App() {
                     album={manualFixAlbum}
                     onClose={() => setManualFixAlbum(null)}
                     onResolve={handleManualResolve}
+                    onUpdateCover={handleUpdateCover}
                 />
             )}
 

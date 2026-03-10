@@ -1,6 +1,8 @@
 name: Release Manager
 
 on:
+  release:
+    types: [published]
   workflow_dispatch:
     inputs:
       release_type:
@@ -38,10 +40,22 @@ jobs:
         id: version
         run: |
           chmod +x scripts/version_manager.py
-          NEW_VERSION=$(python3 scripts/version_manager.py bump --type ${{ inputs.release_type }})
+          
+          if [ "${{ github.event_name }}" = "release" ]; then
+            # Use the tag name from the release, removing the leading 'v'
+            TAG_NAME="${{ github.event.release.tag_name }}"
+            NEW_VERSION="${TAG_NAME#v}"
+            echo "Determined version from release tag: $NEW_VERSION"
+          else
+            # Manual trigger fallback
+            NEW_VERSION=$(python3 scripts/version_manager.py bump --type ${{ inputs.release_type }})
+            echo "Determined version from version_manager: $NEW_VERSION"
+          fi
+          
           echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
           
       - name: Commit Version Bump
+        if: github.event_name == 'workflow_dispatch'
         run: |
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
@@ -50,6 +64,7 @@ jobs:
           git push
 
       - name: Create GitHub Release
+        if: github.event_name == 'workflow_dispatch'
         id: create_release
         uses: softprops/action-gh-release@v2
         with:
@@ -75,10 +90,12 @@ jobs:
         with:
           context: .
           push: ${{ env.DOCKER_USERNAME != '' }}
+          build-args: |
+            VITE_APP_VERSION=${{ steps.version.outputs.version }}
           tags: |
-            er-musictagmanager:${{ inputs.release_type }}
+            er-musictagmanager:${{ github.event_name == 'workflow_dispatch' && inputs.release_type || 'release' }}
             er-musictagmanager:${{ steps.version.outputs.version }}
-            ${{ inputs.release_type == 'stable' && 'er-musictagmanager:latest' || '' }}
+            ${{ (github.event_name == 'release' && !github.event.release.prerelease) || (github.event_name == 'workflow_dispatch' && inputs.release_type == 'stable') && 'er-musictagmanager:latest' || '' }}
 
   package:
     name: Build Apps
@@ -110,6 +127,8 @@ jobs:
         run: cd frontend && npm ci
 
       - name: Build Frontend
+        env:
+          VITE_APP_VERSION: ${{ needs.release.outputs.version }}
         run: cd frontend && npm run build
 
       - name: Install Backend
@@ -151,7 +170,7 @@ jobs:
   post-release:
     name: Post Release Bump
     needs: [release, package]
-    if: inputs.release_type != 'nightly'
+    if: github.event_name == 'workflow_dispatch' && inputs.release_type != 'nightly'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

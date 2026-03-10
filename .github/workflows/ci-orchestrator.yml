@@ -93,7 +93,9 @@ jobs:
       - uses: actions/checkout@v4
       
       - name: Set up Docker Buildx
+        if: env.ACT != 'true'
         uses: docker/setup-buildx-action@v3
 
       - name: Validate Dockerfile
+        if: env.ACT != 'true'
         run: docker build . --file Dockerfile
