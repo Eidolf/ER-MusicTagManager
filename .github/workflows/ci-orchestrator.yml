@@ -18,6 +18,9 @@ on:
       - '.github/pull_request_template.md'
       - '.github/labeler.yml'
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   lint:
     name: Lint Codebase
