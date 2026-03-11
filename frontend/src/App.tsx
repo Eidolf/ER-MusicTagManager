@@ -42,6 +42,15 @@ interface MusicBrainzRelease {
     "cover-art-archive"?: { front: boolean };
 }
 
+interface LibraryHealthIssue {
+    folder_path: string;
+    missing_cover: boolean;
+    missing_mbid: boolean;
+    track_count: number;
+    found_mbid?: string;
+    cover_base64?: string;
+}
+
 // --- Components ---
 
 // --- Components ---
@@ -175,7 +184,7 @@ const DetailsModal = ({ title, data, onClose, type, onDiff, onManualIdentify, on
                                             </>
                                         ) : (
                                             <div className="p-1 flex flex-col items-center justify-center h-full w-full">
-                                                <span className="text-xl mb-1 block">🔍</span>
+                                                <svg className="w-6 h-6 mx-auto mb-1 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
                                                 <span>No Cover<br />(Click to Search)</span>
                                             </div>
                                         )}
@@ -235,7 +244,7 @@ const DetailsModal = ({ title, data, onClose, type, onDiff, onManualIdentify, on
                                                             (album.status?.startsWith('Error') || album.status === 'API Error') ? 'bg-red-900 text-red-200' :
                                                                 'bg-gray-700'
                                                         }`}>
-                                                    {(album.status?.startsWith('Error')) ? 'Error ℹ' : (album.status || 'Pending')}
+                                                    {(album.status?.startsWith('Error')) ? <span className="flex items-center justify-center gap-1">Error <svg className="w-3 h-3 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg></span> : (album.status || 'Pending')}
                                                 </div>
 
                                                 {/* Toggle Button for Details */}
@@ -367,6 +376,42 @@ const DetailsModal = ({ title, data, onClose, type, onDiff, onManualIdentify, on
     );
 };
 
+const CoverIndicator = ({ releaseId }: { releaseId: string }) => {
+    const [hasCover, setHasCover] = useState<boolean | null>(null);
+    useEffect(() => {
+        let isMounted = true;
+        fetch(`https://coverartarchive.org/release/${releaseId}/front-250.jpg`, { method: 'HEAD' })
+            .then(res => {
+                if (isMounted) setHasCover(res.ok);
+            })
+            .catch(() => {
+                if (isMounted) setHasCover(false);
+            });
+        return () => { isMounted = false; };
+    }, [releaseId]);
+
+    if (hasCover === null) {
+        return <span className="text-gray-400 text-[10px] px-2 py-0.5 italic">Checking cover...</span>;
+    }
+
+    return hasCover ? (
+        <span className="bg-green-900 border-green-500 text-green-300 px-2 py-0.5 rounded text-[10px] font-bold uppercase border shadow-sm flex items-center gap-1">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
+                <path fillRule="evenodd" d="M1 5.25A2.25 2.25 0 013.25 3h13.5A2.25 2.25 0 0119 5.25v9.5A2.25 2.25 0 0116.75 17H3.25A2.25 2.25 0 011 14.75v-9.5zm1.5 5.81v3.69c0 .414.336.75.75.75h13.5a.75.75 0 00.75-.75v-2.69l-2.22-2.219a2.25 2.25 0 00-3.182 0l-1.44 1.439-2.25-1.5a2.25 2.25 0 00-2.438.037L2.5 11.06zm15-4.31l-3.22 3.22a.75.75 0 00-1.06 0L11.78 8.53a.75.75 0 00-1.06 0l-8.22 8.22v-3.69l3.22-3.22a.75.75 0 011.06 0l1.44 1.439 2.25-1.5a.75.75 0 01.813-.037L17.5 11.06v-4.31z" clipRule="evenodd" />
+                <path d="M5.5 8a1.5 1.5 0 100-3 1.5 1.5 0 000 3z" />
+            </svg>
+            YES Cover
+        </span>
+    ) : (
+        <span className="bg-red-900 border-red-500 text-red-300 px-2 py-0.5 rounded text-[10px] font-bold uppercase border shadow-sm flex items-center gap-1">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z" clipRule="evenodd" />
+            </svg>
+            NO Cover
+        </span>
+    );
+};
+
 const ManualSearchModal = ({ album, onClose, onResolve, onUpdateCover }: { album: Album, onClose: () => void, onResolve: (updatedAlbum: Album) => void, onUpdateCover?: (albumId: string, url: string) => void }) => {
     const [artistQuery, setArtistQuery] = useState(album.artist === "Unknown Artist" ? "" : album.artist);
     const [albumQuery, setAlbumQuery] = useState(album.title);
@@ -467,7 +512,7 @@ const ManualSearchModal = ({ album, onClose, onResolve, onUpdateCover }: { album
                             </>
                         ) : (
                             <div className="p-1 flex flex-col items-center justify-center h-full w-full">
-                                <span className="text-base mb-0.5 block">🔍</span>
+                                <svg className="w-5 h-5 mx-auto mb-1 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
                                 <span>No Cover</span>
                             </div>
                         )}
@@ -536,7 +581,6 @@ const ManualSearchModal = ({ album, onClose, onResolve, onUpdateCover }: { album
 
                 <div className="space-y-2">
                     {results.map((r) => {
-                        const hasCover = r["cover-art-archive"]?.front;
                         const trackCount = r["track-count"] || "?";
                         const year = r["date"] || "Unknown";
                         const label = r["label-info"]?.[0]?.label?.name || "-";
@@ -550,22 +594,7 @@ const ManualSearchModal = ({ album, onClose, onResolve, onUpdateCover }: { album
                                         <span>Tracks: {trackCount}</span>
                                         <span>Label: {label}</span>
                                         <span>Score: {r.score}</span>
-                                        {hasCover ? (
-                                            <span className="bg-green-900 border-green-500 text-green-300 px-2 py-0.5 rounded text-[10px] font-bold uppercase border shadow-sm flex items-center gap-1">
-                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
-                                                    <path fillRule="evenodd" d="M1 5.25A2.25 2.25 0 013.25 3h13.5A2.25 2.25 0 0119 5.25v9.5A2.25 2.25 0 0116.75 17H3.25A2.25 2.25 0 011 14.75v-9.5zm1.5 5.81v3.69c0 .414.336.75.75.75h13.5a.75.75 0 00.75-.75v-2.69l-2.22-2.219a2.25 2.25 0 00-3.182 0l-1.44 1.439-2.25-1.5a2.25 2.25 0 00-2.438.037L2.5 11.06zm15-4.31l-3.22 3.22a.75.75 0 00-1.06 0L11.78 8.53a.75.75 0 00-1.06 0l-8.22 8.22v-3.69l3.22-3.22a.75.75 0 011.06 0l1.44 1.439 2.25-1.5a.75.75 0 01.813-.037L17.5 11.06v-4.31z" clipRule="evenodd" />
-                                                    <path d="M5.5 8a1.5 1.5 0 100-3 1.5 1.5 0 000 3z" />
-                                                </svg>
-                                                YES Cover
-                                            </span>
-                                        ) : (
-                                            <span className="bg-red-900 border-red-500 text-red-300 px-2 py-0.5 rounded text-[10px] font-bold uppercase border shadow-sm flex items-center gap-1">
-                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
-                                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z" clipRule="evenodd" />
-                                                </svg>
-                                                NO Cover
-                                            </span>
-                                        )}
+                                        <CoverIndicator releaseId={r.id} />
                                     </div>
                                 </div>
                                 <button
@@ -587,6 +616,163 @@ const ManualSearchModal = ({ album, onClose, onResolve, onUpdateCover }: { album
     )
 
 }
+
+const LibraryHealthModal = ({ results, onClose, onFixFolder }: { results: LibraryHealthIssue[], onClose: () => void, onFixFolder: (path: string) => void }) => {
+    const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+    const toggleExpand = (path: string) => {
+        const next = new Set(expanded);
+        if (next.has(path)) next.delete(path);
+        else next.add(path);
+        setExpanded(next);
+    };
+
+    const displayResults = [...results].sort((a, b) => {
+        // Sort issues first
+        const aIssue = a.missing_cover || a.missing_mbid ? 1 : 0;
+        const bIssue = b.missing_cover || b.missing_mbid ? 1 : 0;
+        if (aIssue !== bIssue) return bIssue - aIssue;
+        return a.folder_path.localeCompare(b.folder_path);
+    });
+
+    const issuesCount = results.filter(r => r.missing_cover || r.missing_mbid).length;
+
+    return (
+        <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-[70] p-8" onClick={onClose}>
+            <div className="bg-gray-800 rounded-xl p-6 max-w-5xl w-full max-h-[90vh] flex flex-col border border-gray-600" onClick={e => e.stopPropagation()}>
+                <div className="flex justify-between items-center mb-6 border-b border-gray-700 pb-4 shrink-0">
+                    <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                        <span>Library Health Check</span>
+                        <span className="bg-gray-700 text-gray-300 text-xs px-2 py-1 rounded-full">{results.length} Folders</span>
+                        {issuesCount > 0 && <span className="bg-red-900/50 text-red-200 text-xs px-2 py-1 rounded-full">{issuesCount} Issues</span>}
+                    </h2>
+                    <button onClick={onClose} className="text-gray-400 hover:text-white text-2xl">&times;</button>
+                </div>
+
+                {results.length === 0 ? (
+                    <div className="text-center py-12 text-gray-400 bg-gray-700/20 rounded-lg shrink-0">
+                        <svg className="w-12 h-12 mx-auto mb-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                        No audio folders found in the scanned directory!
+                    </div>
+                ) : (
+                    <div className="flex-1 overflow-y-auto space-y-2 pr-2">
+                        <div className="grid grid-cols-12 gap-4 font-bold text-gray-400 mb-2 px-2 text-sm sticky top-0 bg-gray-800 py-2 border-b border-gray-700 z-10">
+                            <div className="col-span-7">Folder Path</div>
+                            <div className="col-span-2 text-center">Tracks</div>
+                            <div className="col-span-2 text-center">Status</div>
+                            <div className="col-span-1 text-right">Action</div>
+                        </div>
+                        {displayResults.map((issue, idx) => (
+                            <div key={idx} className="bg-gray-700/50 rounded hover:bg-gray-700 transition flex flex-col border border-transparent hover:border-gray-600">
+                                <div className="grid grid-cols-12 gap-4 p-3 items-center cursor-pointer" onClick={() => toggleExpand(issue.folder_path)}>
+                                    <div className="col-span-7 font-mono text-xs text-gray-300 truncate" title={issue.folder_path}>
+                                        {issue.folder_path}
+                                    </div>
+                                    <div className="col-span-2 text-center text-gray-400 text-sm">{issue.track_count}</div>
+                                    <div className="col-span-2 flex justify-center gap-1">
+                                        {issue.missing_mbid && <span className="bg-red-900/50 text-red-300 text-[10px] px-2 py-0.5 rounded border border-red-800 font-bold" title="Missing MusicBrainz ID">MBID</span>}
+                                        {issue.missing_cover && <span className="bg-yellow-900/50 text-yellow-300 text-[10px] px-2 py-0.5 rounded border border-yellow-800 font-bold" title="Missing Cover Art">COVER</span>}
+                                        {!issue.missing_mbid && !issue.missing_cover && <span className="text-green-400" title="All Good"><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg></span>}
+                                    </div>
+                                    <div className="col-span-1 text-right flex justify-end gap-2 items-center">
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onFixFolder(issue.folder_path);
+                                                onClose();
+                                            }}
+                                            className="bg-blue-600 hover:bg-blue-500 text-white text-[10px] px-2 py-1 rounded transition shadow-sm"
+                                            title="Load this folder for processing"
+                                        >
+                                            Load
+                                        </button>
+                                        <svg className={`w-4 h-4 text-gray-400 transition-transform ${expanded.has(issue.folder_path) ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                                    </div>
+                                </div>
+                                {expanded.has(issue.folder_path) && (
+                                    <div className="p-4 bg-gray-900/80 text-sm border-t border-gray-600/50">
+                                        <div className="flex flex-col gap-3">
+                                            <div className="flex items-start gap-4">
+                                                <div className="bg-gray-800 rounded-lg w-16 h-16 flex items-center justify-center shrink-0 overflow-hidden border border-gray-700 shadow-inner">
+                                                    {issue.cover_base64 ? (
+                                                        <img src={issue.cover_base64} alt="Cover Preview" className="w-full h-full object-cover" />
+                                                    ) : (
+                                                        <svg className="w-6 h-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                                                    )}
+                                                </div>
+                                                <div className="py-1">
+                                                    <div className="text-gray-400 text-xs font-bold mb-1 uppercase tracking-wider">Cover Art</div>
+                                                    {issue.missing_cover ? <div className="text-red-400 font-medium">Missing ❌</div> : <div className="text-green-400 font-medium flex items-center gap-1">Found <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg></div>}
+                                                </div>
+                                            </div>
+                                            <div className="flex items-start gap-4">
+                                                <div className="bg-gray-800 rounded-lg w-16 h-16 flex items-center justify-center shrink-0 border border-gray-700">
+                                                    <svg className="w-6 h-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" /></svg>
+                                                </div>
+                                                <div className="py-1">
+                                                    <div className="text-gray-400 text-xs font-bold mb-1 uppercase tracking-wider">MusicBrainz ID</div>
+                                                    {issue.missing_mbid ? <div className="text-red-400 font-medium">Missing ❌</div> : <div className="text-green-400 font-mono text-xs bg-green-900/30 px-2 py-1 rounded inline-block">{issue.found_mbid || 'Present (Unknown ID format)'}</div>}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
+const HelpModal = ({ onClose }: { onClose: () => void }) => {
+    return (
+        <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-[80] p-8" onClick={onClose}>
+            <div className="bg-gray-800 rounded-xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-gray-600" onClick={e => e.stopPropagation()}>
+                <div className="flex justify-between items-center mb-6 border-b border-gray-700 pb-4">
+                    <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                        <span className="flex items-center gap-2"><svg className="w-6 h-6 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> ER-MusicTagManager Guide</span>
+                    </h2>
+                    <button onClick={onClose} className="text-gray-400 hover:text-white text-2xl">&times;</button>
+                </div>
+
+                <div className="space-y-6 text-gray-300 text-sm">
+                    <section>
+                        <h3 className="text-primary font-bold text-lg mb-2">1. Library Health Check</h3>
+                        <p>Quickly scan your library to find missing album artwork or MusicBrainz IDs without modifying any files or doing deep metadata lookups. Use this to identify which folders need your attention.</p>
+                    </section>
+
+                    <section>
+                        <h3 className="text-orange-500 font-bold text-lg mb-2">2. Processing Workflow</h3>
+                        <ul className="list-disc pl-5 space-y-2">
+                            <li><strong>Input & Output Directories:</strong> Enter the source folder of untagged music and a clean destination folder.</li>
+                            <li><strong>Start Processing:</strong> Scans files, identifies albums via MusicBrainz, and stages them for review.</li>
+                        </ul>
+                    </section>
+
+                    <section>
+                        <h3 className="text-red-400 font-bold text-lg mb-2">3. Manual Identification (Review & Fix)</h3>
+                        <p>Albums that couldn't be perfectly matched automatically will end up here. Click <strong>Review & Fix</strong> to:</p>
+                        <ul className="list-disc pl-5 mt-2 space-y-2">
+                            <li>Click <strong>Deep Search</strong> to query MusicBrainz manually.</li>
+                            <li>Click the <strong>No Cover</strong> prompt to quickly search Google Images and paste an image URL.</li>
+                        </ul>
+                    </section>
+
+                    <section>
+                        <h3 className="text-green-500 font-bold text-lg mb-2">4. Writing and Organizing</h3>
+                        <p>Once everything is matched, click <strong>Write All</strong> to embed the new ID3/FLAC metadata (tags, cover art) into the files and move them into the output directory structured by <code>Artist/Album/File</code>.</p>
+                    </section>
+                </div>
+
+                <div className="mt-8 text-right">
+                    <button onClick={onClose} className="bg-gray-700 hover:bg-gray-600 text-white px-6 py-2 rounded font-bold transition">Got it</button>
+                </div>
+            </div>
+        </div>
+    );
+};
 
 // --- Main App Component ---
 
@@ -611,6 +797,13 @@ function App() {
     const [diffFile, setDiffFile] = useState<{ file: MusicFile, original?: MusicFile } | null>(null);
     const [manualFixAlbum, setManualFixAlbum] = useState<Album | null>(null);
     const [manuallyFixedIds, setManuallyFixedIds] = useState<Set<string>>(new Set());
+
+    // Library Health State
+    const [libraryHealthResults, setLibraryHealthResults] = useState<LibraryHealthIssue[] | null>(null);
+    const [isHealthScanning, setIsHealthScanning] = useState(false);
+
+    // Help UI
+    const [showHelp, setShowHelp] = useState(false);
 
     // --- Effects ---
     useEffect(() => {
@@ -652,6 +845,38 @@ function App() {
             console.error("Shutdown failed", e);
         }
     }
+
+    const handleHealthScan = async () => {
+        if (!inputPath) {
+            alert("Please enter an Input Directory (Scan) to check your library.");
+            return;
+        }
+        setIsHealthScanning(true);
+        setStatus("Health Checking...");
+        setLibraryHealthResults(null);
+
+        try {
+            const res = await fetch('/api/v1/library-scan', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ input_path: inputPath })
+            });
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.detail || "Health scan failed");
+            }
+            const data: LibraryHealthIssue[] = await res.json();
+            setLibraryHealthResults(data);
+            setStatus("Idle");
+        } catch (err) {
+            const e = err as Error;
+            console.error(e);
+            alert("Health scan error: " + e.message);
+            setStatus("Error");
+        } finally {
+            setIsHealthScanning(false);
+        }
+    };
 
     // --- Main Workflow ---
     const handleStart = async () => {
@@ -976,6 +1201,13 @@ function App() {
                             }>{mbStatus.status === 'online' ? "Online" : "Offline"}</span>
                         </div>
                         <button
+                            onClick={() => setShowHelp(true)}
+                            className="bg-gray-800 hover:bg-gray-700 border border-gray-600 text-gray-300 w-8 h-8 rounded-full transition-colors flex items-center justify-center font-bold"
+                            title="Open Guide / Help"
+                        >
+                            ?
+                        </button>
+                        <button
                             onClick={handleShutdown}
                             className="bg-red-900/50 hover:bg-red-700 text-red-200 p-2 rounded-full transition-colors"
                             title="Shutdown Application"
@@ -996,6 +1228,7 @@ function App() {
                             value={inputPath}
                             onChange={(e) => setInputPath(e.target.value)}
                             placeholder="e.g. Linux: /music | Win: C:\Users\Music"
+                            title="The folder where your untagged music currently resides."
                             className="bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm focus:border-primary focus:outline-none transition-colors"
                         />
                     </div>
@@ -1006,13 +1239,23 @@ function App() {
                             value={outputPath}
                             onChange={(e) => setOutputPath(e.target.value)}
                             placeholder="e.g. Linux: /sorted | Win: C:\Users\Sorted"
+                            title="The destination folder where perfectly tagged and structured music will be saved."
                             className="bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm focus:border-green-500 focus:outline-none transition-colors"
                         />
                     </div>
-                    <div className="md:col-span-2 flex justify-end mt-2">
+                    <div className="md:col-span-2 flex justify-end mt-2 gap-4">
+                        <button
+                            onClick={handleHealthScan}
+                            disabled={isProcessing || isHealthScanning}
+                            title="Instantly scan your input directory to find albums missing covers or MusicBrainz IDs without modifying files."
+                            className={`font-bold py-2 px-6 rounded shadow-lg transition-all ${isHealthScanning ? 'bg-gray-600' : 'bg-gray-700 hover:bg-gray-600 border border-gray-600'} text-white disabled:opacity-50 disabled:cursor-not-allowed`}
+                        >
+                            {isHealthScanning ? "Checking..." : "Library Health Check"}
+                        </button>
                         <button
                             onClick={handleStart}
-                            disabled={isProcessing}
+                            disabled={isProcessing || isHealthScanning}
+                            title="Perform a deep scan, identify music on MusicBrainz, and prepare files for tagging."
                             className={`font-bold py-2 px-6 rounded shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all ${identifiedAlbums.length > 0
                                 ? "bg-orange-600 hover:bg-orange-500 text-white"
                                 : "bg-primary hover:bg-blue-600 text-white"
@@ -1030,7 +1273,7 @@ function App() {
                     className="mb-8 bg-red-900/30 border border-red-700/50 p-4 rounded-xl flex items-center justify-between transition"
                 >
                     <div className="flex items-center gap-4 cursor-pointer" onClick={() => setViewDetails('unidentified')}>
-                        <div className="text-2xl text-red-400">⚠️</div>
+                        <div className="flex justify-center mb-2"><svg className="w-8 h-8 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg></div>
                         <div>
                             <h3 className="font-bold text-lg text-red-200">
                                 {unidentifiedCount} Albums Need Attention
@@ -1058,7 +1301,7 @@ function App() {
             {identifiedAlbums.length > 0 && unidentifiedCount === 0 && taggedAlbums.length === 0 && (
                 <div className="mb-8 bg-green-900/30 border border-green-700/50 p-4 rounded-xl flex items-center justify-between">
                     <div className="flex items-center gap-4">
-                        <div className="text-2xl text-green-400">✅</div>
+                        <div className="flex justify-center mb-2"><svg className="w-8 h-8 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg></div>
                         <div>
                             <h3 className="font-bold text-lg text-green-200">All Albums Identified</h3>
                             <p className="text-gray-400 text-sm">
@@ -1169,6 +1412,17 @@ function App() {
                 />
             )}
 
+            {libraryHealthResults && (
+                <LibraryHealthModal
+                    results={libraryHealthResults}
+                    onClose={() => setLibraryHealthResults(null)}
+                    onFixFolder={(path) => {
+                        setInputPath(path);
+                        setTimeout(() => handleStart(), 100);
+                    }}
+                />
+            )}
+
             {manualFixAlbum && (
                 <ManualSearchModal
                     album={manualFixAlbum}
@@ -1176,6 +1430,10 @@ function App() {
                     onResolve={handleManualResolve}
                     onUpdateCover={handleUpdateCover}
                 />
+            )}
+
+            {showHelp && (
+                <HelpModal onClose={() => setShowHelp(false)} />
             )}
 
             <footer className="mt-20 text-center text-gray-600 text-sm">

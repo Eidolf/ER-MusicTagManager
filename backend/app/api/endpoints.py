@@ -14,6 +14,15 @@ from app.services.tagging import TaggingService
 
 router = APIRouter()
 
+def sanitize_str(val):
+    if not isinstance(val, str):
+        return val
+    try:
+        # Convert surrogate escapes back to bytes, then replace invalid utf-8
+        return val.encode('utf-8', 'surrogateescape').decode('utf-8', 'replace')
+    except Exception:
+        return str(val)
+
 AUDIO_EXTENSIONS = {'.mp3', '.flac', '.wav', '.m4a', '.ogg'}
 
 class ScanRequest(BaseModel):
@@ -23,6 +32,17 @@ class ScanRequest(BaseModel):
 class OrganizeRequest(BaseModel):
     albums: list[Album]
     output_path: str
+
+class LibraryScanRequest(BaseModel):
+    input_path: str
+
+class LibraryHealthIssue(BaseModel):
+    folder_path: str
+    missing_cover: bool
+    missing_mbid: bool
+    track_count: int
+    found_mbid: str | None = None
+    cover_base64: str | None = None
 
 @router.get("/health")
 async def health_check():
@@ -116,14 +136,14 @@ async def scan_directory(request: ScanRequest) -> list[Album]:
                     pass
 
             music_file = MusicFile(
-                filename=file,
-                path=file_path,
+                filename=sanitize_str(file),
+                path=sanitize_str(str(file_path)),
                 extension=file_path.suffix.lower(),
                 size_bytes=stat.st_size,
-                artist=artist,
-                album=album_name,
+                artist=sanitize_str(artist),
+                album=sanitize_str(album_name),
                 year=year,
-                extended_tags={'musicbrainz_albumid': mb_release_id} if mb_release_id else {}
+                extended_tags={'musicbrainz_albumid': sanitize_str(mb_release_id)} if mb_release_id else {}
             )
             album_files.append(music_file)
 
@@ -172,20 +192,142 @@ async def scan_directory(request: ScanRequest) -> list[Album]:
              consensus_mbid = mb_ids[0]
 
         album = Album(
-            id=str(root_path),
-            title=detected_title or "Unknown Album",
-            artist=detected_artist or "Unknown Artist",
+            id=sanitize_str(str(root_path)),
+            title=sanitize_str(detected_title) or "Unknown Album",
+            artist=sanitize_str(detected_artist) or "Unknown Artist",
             year=detected_year,
-            path=root_path,
+            path=sanitize_str(str(root_path)),
             files=album_files,
             # If we have ID, it's effectively matched but we need to fetch details. Let's keep Pending but pass ID.
             status="Match" if consensus_mbid else "Pending",
-            mb_release_id=consensus_mbid,
-            local_cover_path=local_cover
+            mb_release_id=sanitize_str(consensus_mbid) if consensus_mbid else None,
+            local_cover_path=sanitize_str(str(local_cover)) if local_cover else None
         )
-        albums_map[str(root_path)] = album
+        albums_map[sanitize_str(str(root_path))] = album
 
     return list(albums_map.values())
+
+@router.post("/library-scan")
+async def scan_library_health(request: LibraryScanRequest) -> list[LibraryHealthIssue]:
+    input_path = Path(request.input_path)
+    if not input_path.exists():
+        raise HTTPException(status_code=404, detail=f"Path not found: {request.input_path}")
+
+    issues = []
+    
+    for root, _, files in os.walk(input_path):
+        audio_files = [f for f in files if Path(f).suffix.lower() in AUDIO_EXTENSIONS]
+        if not audio_files:
+            continue
+            
+        root_path = Path(root)
+        
+        # Check for local cover art
+        has_cover = False
+        local_cover_path = None
+        common_covers = ['cover.jpg', 'cover.png', 'folder.jpg', 'folder.png', 'front.jpg', 'front.png']
+        for cover_name in common_covers:
+            possible_cover = root_path / cover_name
+            if possible_cover.exists():
+                has_cover = True
+                local_cover_path = possible_cover
+                break
+            if not has_cover:
+                 for f in files:
+                     if f.lower() == cover_name:
+                         has_cover = True
+                         local_cover_path = root_path / f
+                         break
+            if has_cover:
+                break
+                
+        # Check for embedded cover art or MBIDs safely using mutagen.File
+        has_mbid = False
+        found_mbid = None
+        cover_base64 = None
+        
+        # Load local cover to base64 if found
+        if local_cover_path:
+            try:
+                import base64
+                with open(local_cover_path, "rb") as img_file:
+                    encoded_string = base64.b64encode(img_file.read()).decode('utf-8')
+                    ext = local_cover_path.suffix.lower()[1:]
+                    mime = "jpeg" if ext == "jpg" else ext
+                    cover_base64 = f"data:image/{mime};base64,{encoded_string}"
+            except Exception:
+                pass
+                
+        sample_file = root_path / audio_files[0]
+        
+        try:
+            import base64
+
+            import mutagen
+            audio = mutagen.File(str(sample_file))
+            if audio is not None:
+                # 1. Check for embedded pictures
+                if not has_cover:
+                    # Generic picture check (FLAC/MP4/Ogg)
+                    if hasattr(audio, 'pictures') and audio.pictures:
+                        has_cover = True
+                        try:
+                            pic = audio.pictures[0]
+                            b64 = base64.b64encode(pic.data).decode('utf-8')
+                            mime = pic.mime if hasattr(pic, 'mime') else 'image/jpeg'
+                            cover_base64 = f"data:{mime};base64,{b64}"
+                        except Exception:
+                            pass
+                    # ID3 specific check (APIC)
+                    elif hasattr(audio, 'tags') and audio.tags:
+                        apic_frames = [f for key, f in audio.tags.items() if key.startswith('APIC')]
+                        if apic_frames:
+                            has_cover = True
+                            try:
+                                pic = apic_frames[0]
+                                b64 = base64.b64encode(pic.data).decode('utf-8')
+                                mime = pic.mime if hasattr(pic, 'mime') else 'image/jpeg'
+                                cover_base64 = f"data:{mime};base64,{b64}"
+                            except Exception:
+                                pass
+
+                # 2. Check for MusicBrainz ID
+                if hasattr(audio, 'tags') and audio.tags:
+                    # Dict-like keys (FLAC, Vorbis, MP4)
+                    for key in audio.tags:
+                        k_lower = key.lower()
+                        is_mb = 'musicbrainz' in k_lower
+                        is_id = any(term in k_lower for term in ('albumid', 'release id', 'album id'))
+                        if is_mb and is_id:
+                            has_mbid = True
+                            v = audio.tags[key]
+                            found_mbid = str(v[0]) if isinstance(v, list) and v else str(v)
+                            break
+                    
+                    # ID3 TXXX frames
+                    if not has_mbid and hasattr(audio.tags, 'getall'):
+                        for frame in audio.tags.getall("TXXX"):
+                            desc = frame.desc.lower()
+                            is_mb = 'musicbrainz' in desc
+                            is_id = any(term in desc for term in ('albumid', 'release id', 'album id'))
+                            if is_mb and is_id:
+                                has_mbid = True
+                                found_mbid = str(frame.text[0]) if frame.text else None
+                                break
+        except Exception:
+            # If mutagen totally fails to parse, it means there are no valid tags
+            pass
+
+        issues.append(LibraryHealthIssue(
+            folder_path=sanitize_str(str(root_path)),
+            missing_cover=not has_cover,
+            missing_mbid=not has_mbid,
+            track_count=len(audio_files),
+            found_mbid=sanitize_str(found_mbid) if found_mbid else None,
+            cover_base64=cover_base64
+        ))
+
+    return issues
 
 @router.post("/identify")
 async def identify_albums(albums: list[Album]) -> list[Album]:
