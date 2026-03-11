@@ -702,7 +702,7 @@ const LibraryHealthModal = ({ results, onClose, onFixFolder }: { results: Librar
                                                 </div>
                                                 <div className="py-1">
                                                     <div className="text-gray-400 text-xs font-bold mb-1 uppercase tracking-wider">Cover Art</div>
-                                                    {issue.missing_cover ? <div className="text-red-400 font-medium">Missing ❌</div> : <div className="text-green-400 font-medium flex items-center gap-1">Found <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg></div>}
+                                                    {issue.missing_cover ? <div className="text-red-400 font-medium flex items-center gap-1">Missing <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></div> : <div className="text-green-400 font-medium flex items-center gap-1">Found <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg></div>}
                                                 </div>
                                             </div>
                                             <div className="flex items-start gap-4">
@@ -711,7 +711,7 @@ const LibraryHealthModal = ({ results, onClose, onFixFolder }: { results: Librar
                                                 </div>
                                                 <div className="py-1">
                                                     <div className="text-gray-400 text-xs font-bold mb-1 uppercase tracking-wider">MusicBrainz ID</div>
-                                                    {issue.missing_mbid ? <div className="text-red-400 font-medium">Missing ❌</div> : <div className="text-green-400 font-mono text-xs bg-green-900/30 px-2 py-1 rounded inline-block">{issue.found_mbid || 'Present (Unknown ID format)'}</div>}
+                                                    {issue.missing_mbid ? <div className="text-red-400 font-medium flex items-center gap-1">Missing <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></div> : <div className="text-green-400 font-mono text-xs bg-green-900/30 px-2 py-1 rounded inline-block">{issue.found_mbid || 'Present (Unknown ID format)'}</div>}
                                                 </div>
                                             </div>
                                         </div>

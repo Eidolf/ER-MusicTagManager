@@ -258,64 +258,81 @@ async def scan_library_health(request: LibraryScanRequest) -> list[LibraryHealth
             except Exception:
                 pass
                 
-        sample_file = root_path / audio_files[0]
-        
         try:
             import base64
 
             import mutagen
-            audio = mutagen.File(str(sample_file))
-            if audio is not None:
-                # 1. Check for embedded pictures
-                if not has_cover:
-                    # Generic picture check (FLAC/MP4/Ogg)
-                    if hasattr(audio, 'pictures') and audio.pictures:
-                        has_cover = True
-                        try:
-                            pic = audio.pictures[0]
-                            b64 = base64.b64encode(pic.data).decode('utf-8')
-                            mime = pic.mime if hasattr(pic, 'mime') else 'image/jpeg'
-                            cover_base64 = f"data:{mime};base64,{b64}"
-                        except Exception:
-                            pass
-                    # ID3 specific check (APIC)
-                    elif hasattr(audio, 'tags') and audio.tags:
-                        apic_frames = [f for key, f in audio.tags.items() if key.startswith('APIC')]
-                        if apic_frames:
+
+            # Iterate through files in case the first returned by os.walk lacks tags (happens on Windows NTFS)
+            for f_name in audio_files:
+                sample_file = root_path / f_name
+                try:
+                    audio = mutagen.File(str(sample_file))
+                except Exception:
+                    continue
+                    
+                if audio is not None:
+                    # 1. Check for embedded pictures
+                    if not has_cover:
+                        # Generic picture check (FLAC/MP4/Ogg)
+                        if hasattr(audio, 'pictures') and audio.pictures:
                             has_cover = True
                             try:
-                                pic = apic_frames[0]
+                                pic = audio.pictures[0]
                                 b64 = base64.b64encode(pic.data).decode('utf-8')
                                 mime = pic.mime if hasattr(pic, 'mime') else 'image/jpeg'
                                 cover_base64 = f"data:{mime};base64,{b64}"
                             except Exception:
                                 pass
+                        # ID3 specific check (APIC)
+                        elif hasattr(audio, 'tags') and audio.tags:
+                            apic_frames = [f for key, f in audio.tags.items() if key.startswith('APIC')]
+                            if apic_frames:
+                                has_cover = True
+                                try:
+                                    pic = apic_frames[0]
+                                    b64 = base64.b64encode(pic.data).decode('utf-8')
+                                    mime = pic.mime if hasattr(pic, 'mime') else 'image/jpeg'
+                                    cover_base64 = f"data:{mime};base64,{b64}"
+                                except Exception:
+                                    pass
 
-                # 2. Check for MusicBrainz ID
-                if hasattr(audio, 'tags') and audio.tags:
-                    # Dict-like keys (FLAC, Vorbis, MP4)
-                    for key in audio.tags:
-                        k_lower = key.lower()
-                        is_mb = 'musicbrainz' in k_lower
-                        is_id = any(term in k_lower for term in ('albumid', 'release id', 'album id'))
-                        if is_mb and is_id:
-                            has_mbid = True
-                            v = audio.tags[key]
-                            found_mbid = str(v[0]) if isinstance(v, list) and v else str(v)
-                            break
-                    
-                    # ID3 TXXX frames
-                    if not has_mbid and hasattr(audio.tags, 'getall'):
-                        for frame in audio.tags.getall("TXXX"):
-                            desc = frame.desc.lower()
-                            is_mb = 'musicbrainz' in desc
-                            is_id = any(term in desc for term in ('albumid', 'release id', 'album id'))
+                    # 2. Check for MusicBrainz ID
+                    if not has_mbid and hasattr(audio, 'tags') and audio.tags:
+                        # Dict-like keys (FLAC, Vorbis, MP4)
+                        keys_to_check = audio.tags.keys() if hasattr(audio.tags, 'keys') else audio.tags
+                        for k_obj in keys_to_check:
+                            key = str(k_obj[0]) if isinstance(k_obj, tuple) else str(k_obj)
+                            
+                            k_lower = key.lower()
+                            is_mb = 'musicbrainz' in k_lower
+                            is_id = any(term in k_lower for term in ('albumid', 'release id', 'album id'))
                             if is_mb and is_id:
                                 has_mbid = True
-                                found_mbid = str(frame.text[0]) if frame.text else None
+                                try:
+                                    v = audio.tags[k_obj]
+                                    found_mbid = (str(v[0]) if v else None) if isinstance(v, list) else str(v)
+                                except Exception:
+                                    pass
                                 break
+                        
+                        # ID3 TXXX frames
+                        if not has_mbid and hasattr(audio.tags, 'getall'):
+                            for frame in audio.tags.getall("TXXX"):
+                                desc = frame.desc.lower()
+                                is_mb = 'musicbrainz' in desc
+                                is_id = any(term in desc for term in ('albumid', 'release id', 'album id'))
+                                if is_mb and is_id:
+                                    has_mbid = True
+                                    found_mbid = str(frame.text[0]) if frame.text else None
+                                    break
+                
+                # If both are found, we don't need to check more files
+                if has_mbid and has_cover:
+                    break
+
         except Exception:
-            # If mutagen totally fails to parse, it means there are no valid tags
+            # Catch-all
             pass
 
         issues.append(LibraryHealthIssue(
