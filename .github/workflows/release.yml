@@ -1,4 +1,4 @@
-name: Release Manager
+name: Release
 
 on:
   release:
@@ -6,29 +6,33 @@ on:
   workflow_dispatch:
     inputs:
       release_type:
-        description: 'Release Type'
+        description: Release Type
         required: true
-        default: 'nightly'
+        default: nightly
         type: choice
         options:
           - nightly
-          - beta
           - stable
-
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
 permissions:
   contents: write
   packages: write
 
+concurrency:
+  group: er-musictagmanager-release
+  cancel-in-progress: false
+
 jobs:
   release:
-    name: Create Release
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.release.prerelease == true && contains(github.event.release.tag_name, '-nightly.')) ||
+      (github.event.release.prerelease == false && !contains(github.event.release.tag_name, '-'))
+    name: Build & Publish Release
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
-      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      is_prerelease: ${{ steps.version.outputs.is_prerelease }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -39,66 +43,111 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Calculate Version
+      - name: Determine Version
         id: version
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_TYPE: ${{ inputs.release_type }}
+          RUN_ID: ${{ github.run_id }}.${{ github.run_attempt }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_PRERELEASE: ${{ github.event.release.prerelease }}
         run: |
-          chmod +x scripts/version_manager.py
-          
-          if [ "${{ github.event_name }}" = "release" ]; then
-            # Use the tag name from the release, removing the leading 'v'
-            TAG_NAME="${{ github.event.release.tag_name }}"
-            NEW_VERSION="${TAG_NAME#v}"
-            echo "Determined version from release tag: $NEW_VERSION"
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            VERSION=$(python3 scripts/version_manager.py --action calculate --type "$RELEASE_TYPE" --run-id "$RUN_ID")
+            IS_PRERELEASE="false"
+            if [[ "$RELEASE_TYPE" == "nightly" ]]; then
+              IS_PRERELEASE="true"
+            fi
           else
-            # Manual trigger fallback
-            NEW_VERSION=$(python3 scripts/version_manager.py bump --type ${{ inputs.release_type }})
-            echo "Determined version from version_manager: $NEW_VERSION"
+            VERSION="${RELEASE_TAG#v}"
+            if [[ "$VERSION" =~ ^[0-9]{4}\.(0?[1-9]|1[0-2])\.[1-9][0-9]*$ && "$RELEASE_PRERELEASE" == "false" ]]; then
+              RELEASE_TYPE="stable"
+              IS_PRERELEASE="false"
+            elif [[ "$VERSION" =~ ^[0-9]{4}\.(0?[1-9]|1[0-2])\.[1-9][0-9]*-nightly\.[0-9]{8}\.[0-9]{4}(\.[0-9]+)*$ && "$RELEASE_PRERELEASE" == "true" ]]; then
+              RELEASE_TYPE="nightly"
+              IS_PRERELEASE="true"
+            else
+              echo "Unsupported release tag or prerelease flag: $RELEASE_TAG" >&2
+              exit 1
+            fi
           fi
-          
-          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
-          
-      - name: Commit Version Bump
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-          git add VERSION
-          git commit -m "chore: bump version to ${{ steps.version.outputs.version }}"
-          git push
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "is_prerelease=$IS_PRERELEASE" >> "$GITHUB_OUTPUT"
 
-      - name: Create GitHub Release
+      - name: Update Stable Version Mirror
+        if: github.event_name == 'workflow_dispatch' && inputs.release_type == 'stable'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: python3 scripts/version_manager.py --action write --version "$VERSION"
+
+      - name: Commit Stable Version Mirror
+        if: github.event_name == 'workflow_dispatch' && inputs.release_type == 'stable'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add VERSION
+          if ! git diff --cached --quiet; then
+            git commit -m "chore(release): bump version to $VERSION"
+            git push
+          fi
+
+      - name: Create Tag (Manual)
         if: github.event_name == 'workflow_dispatch'
-        id: create_release
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          TAG="v${VERSION}"
+          if git show-ref --verify --quiet "refs/tags/${TAG}"; then
+            echo "Tag already exists: ${TAG}" >&2
+            exit 1
+          fi
+          git tag "$TAG"
+          git push origin "refs/tags/${TAG}"
+
+      - name: Generate Release Notes (Manual)
+        if: github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: "v${{ steps.version.outputs.version }}"
-          name: "Release v${{ steps.version.outputs.version }}"
+          tag_name: v${{ steps.version.outputs.version }}
+          name: Release v${{ steps.version.outputs.version }}
           generate_release_notes: true
-          prerelease: ${{ inputs.release_type != 'stable' }}
+          prerelease: ${{ steps.version.outputs.is_prerelease }}
+          make_latest: ${{ steps.version.outputs.is_prerelease == 'false' && 'true' || 'false' }}
 
-      - name: Log in to Docker Hub
-        # Assumes Dockerhub. Replace with ghcr.io if preferred
-        uses: docker/login-action@v3
+      - name: Check Docker Hub Credentials
+        id: check_dockerhub
         env:
           DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+        run: |
+          if [[ -n "$DOCKER_USERNAME" && -n "$DOCKER_PASSWORD" ]]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Log in to Docker Hub
+        if: steps.check_dockerhub.outputs.available == 'true'
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
-        if: env.DOCKER_USERNAME != ''
 
       - name: Build and Push Docker Image
-        uses: docker/build-push-action@v5
+        if: steps.check_dockerhub.outputs.available == 'true'
         env:
-          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          VERSION: ${{ steps.version.outputs.version }}
         with:
           context: .
-          push: ${{ env.DOCKER_USERNAME != '' }}
+          push: true
           build-args: |
             VITE_APP_VERSION=${{ steps.version.outputs.version }}
           tags: |
-            er-musictagmanager:${{ github.event_name == 'workflow_dispatch' && inputs.release_type || 'release' }}
-            er-musictagmanager:${{ steps.version.outputs.version }}
-            ${{ (github.event_name == 'release' && !github.event.release.prerelease) || (github.event_name == 'workflow_dispatch' && inputs.release_type == 'stable') && 'er-musictagmanager:latest' || '' }}
+            ${{ secrets.DOCKER_USERNAME }}/er-musictagmanager:${{ steps.version.outputs.version }}
+            ${{ steps.version.outputs.is_prerelease == 'false' && format('{0}/er-musictagmanager:latest', secrets.DOCKER_USERNAME) || '' }}
+        uses: docker/build-push-action@v5
 
   package:
     name: Build Apps
@@ -107,15 +156,13 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            artifact_name: ER-MusicTagManager-Linux
             asset_name: ER-MusicTagManager-Linux
           - os: windows-latest
-            artifact_name: ER-MusicTagManager-Windows
             asset_name: ER-MusicTagManager-Windows.exe
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -149,10 +196,11 @@ jobs:
         if: matrix.os == 'windows-latest'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.release.outputs.version }}
+          ASSET_NAME: ${{ matrix.asset_name }}
         run: |
-          mv backend/dist/ER-MusicTagManager.exe backend/dist/${{ matrix.asset_name }}
-          gh release upload v${{ needs.release.outputs.version }} backend/dist/${{ matrix.asset_name }} --clobber
-
+          mv backend/dist/ER-MusicTagManager.exe "backend/dist/${ASSET_NAME}"
+          gh release upload "v${VERSION}" "backend/dist/${ASSET_NAME}" --clobber
 
       - name: Archive Linux Build
         if: matrix.os == 'ubuntu-latest'
@@ -166,25 +214,5 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release upload v${{ needs.release.outputs.version }} backend/dist/ER-MusicTagManager-Linux.tar.gz --clobber
-
-
-  post-release:
-    name: Post Release Bump
-    needs: [release, package]
-    if: github.event_name == 'workflow_dispatch' && inputs.release_type != 'nightly'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: main 
-          fetch-depth: 0
-      - name: Bump Dev Version
-        run: |
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-          python3 scripts/version_manager.py bump --type dev
-          git add VERSION
-          git commit -m "chore: prepare for next dev cycle"
-          git push
+          VERSION: ${{ needs.release.outputs.version }}
+        run: gh release upload "v${VERSION}" backend/dist/ER-MusicTagManager-Linux.tar.gz --clobber

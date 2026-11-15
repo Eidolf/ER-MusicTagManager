@@ -1,26 +1,97 @@
-name: Manual Rollback
+name: Restore Stable Release Alias
 
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: 'Version Tag to Delete (e.g., v2025.12.1)'
+      stable_version:
+        description: Stable CalVer version to restore as latest (with or without v)
         required: true
+        type: string
 
 permissions:
   contents: write
-  packages: write
+
+concurrency:
+  group: er-musictagmanager-release
+  cancel-in-progress: false
 
 jobs:
   rollback:
-    name: Rollback Release
+    name: Restore Latest Stable Release
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Delete Release and Tag
+        with:
+          fetch-depth: 0
+
+      - name: Check Docker Hub Credentials
+        id: check_dockerhub
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+        run: |
+          if [[ -n "$DOCKER_USERNAME" && -n "$DOCKER_PASSWORD" ]]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Docker Buildx
+        if: steps.check_dockerhub.outputs.available == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        if: steps.check_dockerhub.outputs.available == 'true'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Validate stable GitHub release
+        env:
+          VERSION_INPUT: ${{ inputs.stable_version }}
+          REPOSITORY: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DOCKERHUB_AVAILABLE: ${{ steps.check_dockerhub.outputs.available }}
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+        run: |
+          VERSION="${VERSION_INPUT#v}"
+          if [[ ! "$VERSION" =~ ^[0-9]{4}\.(0?[1-9]|1[0-2])\.[1-9][0-9]*$ ]]; then
+            echo "Expected a stable version in YYYY.M.PATCH format." >&2
+            exit 1
+          fi
+
+          if git ls-remote --exit-code --tags origin "refs/tags/v${VERSION}" >/dev/null; then
+            TAG="v${VERSION}"
+          elif git ls-remote --exit-code --tags origin "refs/tags/${VERSION}" >/dev/null; then
+            TAG="$VERSION"
+          else
+            echo "Stable Git tag does not exist: ${VERSION}" >&2
+            exit 1
+          fi
+
+          IS_PRERELEASE=$(gh release view "$TAG" --repo "$REPOSITORY" --json isPrerelease --jq .isPrerelease)
+          if [[ "$IS_PRERELEASE" != "false" ]]; then
+            echo "The target release must be stable." >&2
+            exit 1
+          fi
+          if [[ "$DOCKERHUB_AVAILABLE" == "true" ]]; then
+            IMAGE="${DOCKER_USERNAME}/er-musictagmanager"
+            docker buildx imagetools inspect "${IMAGE}:${VERSION}" >/dev/null
+            echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+
+      - name: Restore stable aliases
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          DOCKERHUB_AVAILABLE: ${{ steps.check_dockerhub.outputs.available }}
         run: |
-          gh release delete ${{ inputs.version }} --yes || echo "Release not found"
-          git push --delete origin refs/tags/${{ inputs.version }} || echo "Tag not found locally/remotely"
+          gh release edit "$TAG" --repo "$REPOSITORY" --latest
+          if [[ "$DOCKERHUB_AVAILABLE" == "true" ]]; then
+            docker buildx imagetools create \
+              --tag "${IMAGE}:latest" \
+              "${IMAGE}:${VERSION}"
+          fi
