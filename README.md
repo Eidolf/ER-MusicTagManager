@@ -8,6 +8,12 @@
 
 A production-ready, domain-driven automated music organization tool. Scans directories, identifies albums, retrieves metadata from MusicBrainz, and organizes your music library with precision.
 
+## Project ecosystem
+
+- [Agent instructions](AGENTS.md)
+- [Project profile](https://github.com/Eidolf/ER-KnowledgeBase/blob/main/Projects/ER-MusicTagManager/README.md) (private)
+- [Knowledge-Platform](https://github.com/Eidolf/Knowledge-Platform)
+
 ## 🚀 Features
 
 ### Core Functionality
